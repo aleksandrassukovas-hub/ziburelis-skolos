@@ -62,7 +62,7 @@ details[open] summary{margin-bottom:10px}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;flex:none}
 .dot.ok{background:var(--accent)} .dot.bad{background:var(--crit)} .dot.busy{background:var(--warn)}
 
-.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}
 .stat{background:var(--surface);padding:9px 10px}
 .stat b{display:block;font-family:"IBM Plex Mono",monospace;font-size:17px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.3}
 .stat span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
@@ -104,6 +104,7 @@ label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:
 .field{display:flex;flex-direction:column;min-width:0}
 .field input{width:100%}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
 .tablewrap{overflow-x:auto}
@@ -156,8 +157,8 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;font-family:"IBM Plex Mono",monos
 @media (max-width:760px){
   .top{position:static}
   .stats{grid-template-columns:repeat(2,1fr)}
-  .stat:last-child{grid-column:1/-1}
   .grid2{grid-template-columns:1fr}
+  .kpis{grid-template-columns:1fr 1fr}
   .brand h1{font-size:18px}
 }
 @media (max-width:560px){
@@ -200,7 +201,7 @@ let screen = "setup";           // setup | unlock | app
 let dev = null;                 // įrenginio nustatymai: repozitorijos + užšifruotas raktas
 let token = null;               // GitHub raktas — tik atmintyje ir tik kol atrakinta
 let dataKey = null, dataSalt = null, dataIter = ITER, dataSha = null;
-let plots = [], payments = [], settings = {};
+let plots = [], payments = [], cashOps = [], settings = {};
 let tab = "skolos", filter = "all", q = "", staged = null;
 /* rūšiavimas pagal stulpelius: k — raktas, d — kryptis (1 didėjanti, -1 mažėjanti) */
 const SORT_DEFAULT = { skolos:{k:null,d:1}, kontaktai:{k:null,d:1}, journal:{k:"date",d:-1} };
@@ -305,10 +306,12 @@ function normalize(j){
   });
   const s = Object.assign({year:new Date().getFullYear(), payee:"", iban:"", cash:"", publicUrl:"", smsTemplate:DEFAULT_SMS}, j.settings||{});
   s.year = Number(s.year)||new Date().getFullYear();
-  return {settings:s, plots:P, payments:Y};
+  s.cashOpening = Math.round((Number(s.cashOpening)||0)*100)/100;
+  const C = (Array.isArray(j.cashOps) ? j.cashOps : []).map(c=>({id:String(c.id||newId()), date:String(c.date||""), descr:String(c.descr||""), amount:Math.round((Number(c.amount)||0)*100)/100}));
+  return {settings:s, plots:P, payments:Y, cashOps:C};
 }
-function snapshot(){ return {format:"ziburelis-kasa-data", v:1, savedAt:new Date().toISOString(), settings:settings, plots:plots, payments:payments}; }
-function wipe(){ token=null; dataKey=null; dataSalt=null; dataSha=null; plots=[]; payments=[]; settings={}; staged=null; dirty=false; conflict=false; saveErr=""; }
+function snapshot(){ return {format:"ziburelis-kasa-data", v:1, savedAt:new Date().toISOString(), settings:settings, plots:plots, payments:payments, cashOps:cashOps}; }
+function wipe(){ token=null; dataKey=null; dataSalt=null; dataSha=null; plots=[]; payments=[]; cashOps=[]; settings={}; staged=null; dirty=false; conflict=false; saveErr=""; }
 
 /* ============================================================================
    PRISIJUNGIMO EKRANAI
@@ -381,7 +384,7 @@ async function doConnect(){
     dev.tok = await seal(tKey, tSalt, ITER, {token:tok});
     if(!saveDev(dev)) throw new Error("Naršyklė neleido išsaugoti nustatymų (privatus režimas?). Prisijungimas veiks tik iki kortelės uždarymo.");
     token = tok; dataKey = key; dataSalt = salt; dataIter = iter; dataSha = f.sha;
-    settings = n.settings; plots = n.plots; payments = n.payments;
+    settings = n.settings; plots = n.plots; payments = n.payments; cashOps = n.cashOps;
     lastSaved = null; screen = "app"; tab = "skolos"; render(); toast("Įrenginys prijungtas");
   }catch(e){
     dev = loadDev();
@@ -411,7 +414,7 @@ async function doCreate(){
     busy("setupGo", true, "Šifruojama…");
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const key = await deriveKey(pw, salt, ITER);
-    settings = n.settings; plots = n.plots; payments = n.payments;
+    settings = n.settings; plots = n.plots; payments = n.payments; cashOps = n.cashOps;
     const env = await seal(key, salt, ITER, snapshot());
     busy("setupGo", true, "Siunčiama…");
     const sha = await putFile(cfg.dataRepo, cfg.dataPath, JSON.stringify(env), null, "kasa: sukurta saugykla "+stamp(), tok);
@@ -479,7 +482,7 @@ async function loadRemote(pw){
   let data; try{ data = await unseal(key, env); }catch(_){ throw new Error("Slaptažodis netinka duomenų failui. Jei slaptažodis buvo pakeistas kitame įrenginyje — „Prijungti iš naujo“."); }
   const n = normalize(data);
   dataKey = key; dataSalt = fileSalt; dataIter = iter; dataSha = f.sha;
-  settings = n.settings; plots = n.plots; payments = n.payments;
+  settings = n.settings; plots = n.plots; payments = n.payments; cashOps = n.cashOps;
   dirty = false; conflict = false; saveErr = "";
 }
 function sameBytes(a,b){ if(!a||!b||a.length!==b.length) return false; for(let i=0;i<a.length;i++) if(a[i]!==b[i]) return false; return true; }
@@ -572,16 +575,29 @@ function rows(){
     return Object.assign({},p,{paid:paid,due:due});
   }).sort((a,b)=> a.street===b.street ? geoOrder(a)-geoOrder(b) || a.nr.localeCompare(b.nr,undefined,{numeric:true}) : a.street.localeCompare(b.street));
 }
+/* kasos likutis = likutis metų pradžioje + sodininkų įmokos + kitos pajamos − išlaidos */
+function cashBalance(){
+  const v = (Number(settings.cashOpening)||0) + payments.reduce((s,p)=>s+(+p.amount||0),0) + cashOps.reduce((s,c)=>s+(+c.amount||0),0);
+  return Math.round(v*100)/100;
+}
+function kasaRows(){
+  const ops = payments.map(p=>({id:p.id, date:p.date||"", descr:p.descr||"", inc:+p.amount||0, exp:0, kind:"pay"}))
+    .concat(cashOps.map(c=>({id:c.id, date:c.date||"", descr:c.descr||"", inc:c.amount>0?c.amount:0, exp:c.amount<0?-c.amount:0, kind:"cash"})))
+    .sort((a,b)=> a.date.localeCompare(b.date) || (a.kind===b.kind ? 0 : (a.kind==="pay" ? -1 : 1)));
+  let bal = Number(settings.cashOpening)||0;
+  for(const o of ops){ bal = Math.round((bal + o.inc - o.exp)*100)/100; o.bal = bal; }
+  return ops;
+}
 function totals(){
   const r = rows();
   const charged = r.reduce((s,x)=>s+(Number(x.mokestis)||0)+(Number(x.apSkola)||0),0);
   const paid = r.reduce((s,x)=>s+x.paid,0);
   const debtors = r.filter(x=>x.due>0);
   return {charged:charged,paid:paid,left:charged-paid,clean:r.filter(x=>x.due<=0).length,n:r.length,
-          debtors:debtors.length,debtSum:debtors.reduce((s,x)=>s+x.due,0)};
+          debtors:debtors.length,debtSum:debtors.reduce((s,x)=>s+x.due,0), cash:cashBalance()};
 }
 
-const TABS = [["skolos","Skolos"],["mokejimai","Mokėjimai"],["kontaktai","Kontaktai"],["sms","SMS"],["puslapis","Viešas puslapis"],["nustatymai","Nustatymai"]];
+const TABS = [["skolos","Skolos"],["mokejimai","Mokėjimai"],["kasa","Kasa"],["kontaktai","Kontaktai"],["sms","SMS"],["puslapis","Viešas puslapis"],["nustatymai","Nustatymai"]];
 function renderApp(){
   el("root").innerHTML = '<div class="top"><div class="wrap">'
    + '<div class="brand"><h1>SB Žiburėlis · kasa</h1><span class="yr" id="yrBadge"></span>'
@@ -599,7 +615,8 @@ function renderStats(){
   const t = totals();
   el("stats").innerHTML = tile(eur(t.charged)+" €","Priskaičiuota","") + tile(eur(t.paid)+" €","Sumokėta","good")
     + tile(eur(t.left)+" €","Liko mokėti","bad") + tile(t.clean+" / "+t.n,"Sklypų be skolos","")
-    + tile(t.debtors+" · "+eur(t.debtSum)+" €","Skolininkai","bad");
+    + tile(t.debtors+" · "+eur(t.debtSum)+" €","Skolininkai","bad")
+    + tile(eur(t.cash)+" €","Kasoje",t.cash<0?"bad":"good");
 }
 const tile=(b,s,c)=>'<div class="stat '+c+'"><b>'+esc(b)+'</b><span>'+esc(s)+'</span></div>';
 function renderNav(){
@@ -608,7 +625,7 @@ function renderNav(){
 }
 function renderView(){
   const v = el("view");
-  ({skolos:viewSkolos,mokejimai:viewMokejimai,kontaktai:viewKontaktai,sms:viewSms,puslapis:viewPuslapis,nustatymai:viewNustatymai})[tab](v);
+  ({skolos:viewSkolos,mokejimai:viewMokejimai,kasa:viewKasa,kontaktai:viewKontaktai,sms:viewSms,puslapis:viewPuslapis,nustatymai:viewNustatymai})[tab](v);
 }
 
 /* ---------------- rūšiavimas ---------------- */
@@ -859,6 +876,59 @@ function manualPayment(){
     });
 }
 
+/* ---------------- 2b. Kasa ---------------- */
+function viewKasa(v){
+  const ops = kasaRows(), t = totals();
+  const inc = ops.reduce((s,o)=>s+o.inc,0), exp = ops.reduce((s,o)=>s+o.exp,0);
+  const expOnly = ops.filter(o=>o.exp);
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Kasos žurnalas '+esc(settings.year)+'</h2><span class="sp"></span>'
+   + '<button class="btn pri" id="addCash">Nauja kasos operacija</button></div>'
+   + '<div class="panel-bd"><div class="kpis">'
+   + '<div><label>Metų pradžioje</label><div class="mono" style="font-size:16px">'+eur(settings.cashOpening||0)+' €</div></div>'
+   + '<div><label>Pajamos</label><div class="mono" style="font-size:16px;color:var(--accent)">+'+eur(inc)+' €</div></div>'
+   + '<div><label>Išlaidos</label><div class="mono" style="font-size:16px;color:var(--crit)">−'+eur(exp)+' €</div></div>'
+   + '<div><label>Dabar kasoje</label><div class="mono" style="font-size:16px;font-weight:600'+(t.cash<0?';color:var(--crit)':'')+'">'+eur(t.cash)+' €</div></div>'
+   + '</div><p class="hint" style="margin:10px 0 0">Sodininkų įmokos čia patenka automatiškai iš skirtuko „Mokėjimai“. Čia įveskite išlaidas (TALKA įmoka už vandentiekį, kelio remontas ir pan.) ir kitas pajamas.</p></div>'
+   + '<div class="tablewrap"><table><thead><tr><th>Data</th><th>Operacija</th><th class="r">Pajamos</th><th class="r">Išlaidos</th><th class="r">Likutis</th><th></th></tr></thead><tbody>'
+   + '<tr><td class="mono"></td><td><i>Likutis metų pradžioje</i></td><td class="r"></td><td class="r"></td><td class="r">'+eur(settings.cashOpening||0)+'</td><td></td></tr>'
+   + ops.map(o=>'<tr'+(o.kind==="cash"?' style="background:var(--surface-2)"':'')+'><td class="mono">'+esc(o.date)+'</td><td>'+esc(o.descr)+'</td>'
+      + '<td class="r">'+(o.inc?eur(o.inc):'')+'</td><td class="r'+(o.exp?' due':'')+'">'+(o.exp?eur(o.exp):'')+'</td>'
+      + '<td class="r'+(o.bal<0?' due':'')+'">'+eur(o.bal)+'</td>'
+      + '<td class="r">'+(o.kind==="cash"?'<button class="btn sm ghost cdel" data-id="'+esc(o.id)+'">ištrinti</button>':'')+'</td></tr>').join("")
+   + '</tbody><tfoot><tr><td colspan="2">Iš viso</td><td class="r">'+eur(inc)+'</td><td class="r">'+eur(exp)+'</td><td class="r'+(t.cash<0?' due':'')+'">'+eur(t.cash)+'</td><td></td></tr></tfoot></table></div></div>'
+   + '<div class="panel"><div class="panel-hd"><h2>Išlaidų ataskaita '+esc(settings.year)+'</h2><span class="sp"></span>'
+   + '<button class="btn" id="dlKasa">Kasos žurnalas (CSV)</button><button class="btn" id="dlExp">Išlaidos (CSV)</button></div>'
+   + (expOnly.length
+       ? '<div class="tablewrap"><table><thead><tr><th>Data</th><th>Išlaidos</th><th class="r">Suma</th></tr></thead><tbody>'
+         + expOnly.map(o=>'<tr><td class="mono">'+esc(o.date)+'</td><td>'+esc(o.descr)+'</td><td class="r">'+eur(o.exp)+'</td></tr>').join("")
+         + '</tbody><tfoot><tr><td colspan="2">Iš viso išlaidų</td><td class="r">'+eur(exp)+'</td></tr></tfoot></table></div>'
+       : '<div class="panel-bd"><p class="hint" style="margin:0">Šiais metais išlaidų dar neįvesta.</p></div>')
+   + '</div>';
+  el("addCash").onclick = addCashOp;
+  v.querySelectorAll(".cdel").forEach(b=>b.onclick=()=>{
+    const c = cashOps.find(x=>x.id===b.dataset.id); if(!c) return;
+    if(!confirm("Ištrinti operaciją „"+c.descr+"“ ("+eur(Math.abs(c.amount))+" €)?")) return;
+    cashOps = cashOps.filter(x=>x.id!==c.id); touch(); renderAll(); toast("Ištrinta");
+  });
+  el("dlKasa").onclick = ()=>downloadCsv("Kasa-"+settings.year+".csv", ["Data","Operacija","Pajamos","Išlaidos","Likutis"],
+    [["","Likutis metų pradžioje","","",settings.cashOpening||0]].concat(ops.map(o=>[o.date,o.descr,o.inc||"",o.exp||"",o.bal])));
+  el("dlExp").onclick = ()=>downloadCsv("Islaidos-"+settings.year+".csv", ["Data","Išlaidos","Suma"], expOnly.map(o=>[o.date,o.descr,o.exp]).concat([["","Iš viso",exp]]));
+}
+function addCashOp(){
+  modal("Nauja kasos operacija",
+    '<div class="grid2"><div class="field"><label for="co_t">Tipas</label><select id="co_t"><option value="exp">Išlaidos</option><option value="inc">Kitos pajamos</option></select></div>'
+    + f("Data","co_d","date",today())+'</div>'
+    + '<div style="margin-top:10px">'+f("Operacija","co_s","text","")+'</div>'
+    + '<div style="margin-top:10px">'+f("Suma, €","co_a","number","")+'</div>',
+    ()=>{
+      const a = Math.round(Math.abs(Number(el("co_a").value)||0)*100)/100, d = el("co_s").value.trim();
+      if(!a || !d){ toast("Reikia aprašymo ir sumos"); return false; }
+      cashOps.push({id:newId(), date:el("co_d").value||today(), descr:d, amount: el("co_t").value==="exp" ? -a : a});
+      touch(); renderAll(); toast("Įrašyta");
+    });
+  const s2 = el("co_s"); if(s2) s2.placeholder = settings.year+" m. TALKA įmoka už sezoninį vandentiekį";
+}
+
 /* ---------------- 3. Kontaktai ---------------- */
 function viewKontaktai(v){
   const r = sortBy("kontaktai", rows(), ACC_PLOT); const noPhone = r.filter(x=>!x.phone && !x.phone2);
@@ -997,13 +1067,14 @@ function viewPuslapis(v){
    + '<div class="note info">Mygtukas įrašo <span class="mono">'+esc(dev.pubPath)+'</span> į viešą repozitoriją <span class="mono">'+esc(dev.pubRepo)+'</span>. Svetainėje <span class="mono">'+esc(url)+'</span> atsinaujins per 1–2 minutes; trumpoji nuoroda SMS žinutėse nesikeičia. Puslapyje tik sklypų numeriai ir sumos — prieš siunčiant programa patikrina, kad jame nėra vardų, telefonų ir el. pašto adresų.</div>'
    + '<div class="prev" style="margin-top:12px"><iframe id="pv" title="Viešo puslapio peržiūra" sandbox></iframe></div></div></div>'
    + '<div class="panel"><div class="panel-hd"><h2>Eksportas</h2></div><div class="panel-bd"><div class="toolbar">'
-   + '<button class="btn" id="dlAll">Visi duomenys (JSON)</button><button class="btn" id="dlMok">Mokestis '+settings.year+' (CSV)</button><button class="btn" id="dlPay">Mokėjimai '+settings.year+' (CSV)</button></div>'
+   + '<button class="btn" id="dlAll">Visi duomenys (JSON)</button><button class="btn" id="dlMok">Mokestis '+settings.year+' (CSV)</button><button class="btn" id="dlPay">Mokėjimai '+settings.year+' (CSV)</button><button class="btn" id="dlKasa2">Kasa '+settings.year+' (CSV)</button></div>'
    + '<p class="hint" style="margin:10px 0 0">Eksportuoti failai nešifruoti — tai atsarginė kopija jūsų kompiuteriui ir bendrijos ataskaitoms. CSV atsidaro Excel su lietuviškomis raidėmis.</p></div></div>';
   el("pv").srcdoc = html;
   el("pub").onclick = publishPublic;
   el("dl").onclick = ()=>download("index.html", publicHtml(), "text/html");
   el("dlAll").onclick = ()=>download("SB-Ziburelis-"+settings.year+"-duomenys.json", JSON.stringify({format:"ziburelis-kasa-export",exported:today(),settings:settings,plots:plots,payments:payments},null,1), "application/json");
   el("dlMok").onclick = ()=>downloadCsv("Mokestis-"+settings.year+".csv", ["Gatve","Nr","Vardas","Mokėti","AP skola","Sumokėta","Skola"], rows().map(x=>[x.street,x.nr,x.name,x.mokestis,x.apSkola,x.paid,x.due]));
+  el("dlKasa2").onclick = ()=>{ const ops = kasaRows(); downloadCsv("Kasa-"+settings.year+".csv", ["Data","Operacija","Pajamos","Išlaidos","Likutis"], [["","Likutis metų pradžioje","","",settings.cashOpening||0]].concat(ops.map(o=>[o.date,o.descr,o.inc||"",o.exp||"",o.bal]))); };
   el("dlPay").onclick = ()=>downloadCsv("Mokejimai-"+settings.year+".csv", ["Data","Operacija","Sklypai","Suma"], payments.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(p=>[p.date,p.descr,Object.keys(p.alloc||{}).map(k=>k+":"+p.alloc[k]).join(" "),p.amount]));
 }
 async function publishPublic(){
@@ -1025,6 +1096,7 @@ function viewNustatymai(v){
   v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Rekvizitai ir metai</h2></div><div class="panel-bd">'
    + '<div class="grid2">'+f("Apskaitos metai","s_y","number",settings.year)+f("Nuoroda SMS žinutėms","s_u","text",settings.publicUrl)+f("Pavedimo gavėjas","s_p","text",settings.payee)+f("IBAN","s_i","text",settings.iban)+'</div>'
    + '<div style="margin-top:10px">'+f("Grynaisiais adresu","s_c","text",settings.cash)+'</div>'
+   + '<div style="margin-top:10px">'+f("Kasos likutis metų pradžioje, €","s_co","number",settings.cashOpening||0)+'</div>'
    + '<p class="hint" style="margin:10px 0 0">Rekvizitai įterpiami tik į SMS žinutes. Į viešą puslapį jie nepatenka.</p>'
    + '<div class="toolbar" style="margin-top:12px"><button class="btn pri" id="sv">Išsaugoti</button></div></div></div>'
    + '<div class="panel"><div class="panel-hd"><h2>Saugumas</h2></div><div class="panel-bd">'
@@ -1035,11 +1107,11 @@ function viewNustatymai(v){
    + '<button class="btn dan" id="fg">Pamiršti šį įrenginį</button></div>'
    + '<p class="hint" style="margin:10px 0 0">Kiekvienas išsaugojimas — atskiras įrašas (commit) privačioje repozitorijoje. Grįžti galima atkūrus reikiamą failo versiją GitHub.</p></div></div>'
    + '<div class="panel"><div class="panel-hd"><h2>Metų uždarymas</h2></div><div class="panel-bd">'
-   + '<p class="hint" style="margin:0 0 10px">Perkelia kiekvieno sklypo likutį (<span class="mono">Liko</span>, įskaitant permokas su minuso ženklu) į kitų metų <span class="mono">Sena skola</span>, išvalo mokėjimų žurnalą ir padidina metus. Praėjusių metų žurnalas lieka GitHub istorijoje; vis dėlto prieš uždarydami atsisiųskite eksportą.</p>'
+   + '<p class="hint" style="margin:0 0 10px">Perkelia kiekvieno sklypo likutį (<span class="mono">Liko</span>, įskaitant permokas su minuso ženklu) į kitų metų <span class="mono">Sena skola</span>, perkelia kasos likutį, išvalo mokėjimų ir kasos žurnalus ir padidina metus. Praėjusių metų žurnalas lieka GitHub istorijoje; vis dėlto prieš uždarydami atsisiųskite eksportą.</p>'
    + '<button class="btn" id="roll">Uždaryti '+settings.year+' ir atidaryti '+(Number(settings.year)+1)+'</button></div></div>';
   el("sv").onclick = ()=>{
     settings.year=Number(el("s_y").value)||settings.year; settings.publicUrl=el("s_u").value.trim(); settings.payee=el("s_p").value.trim();
-    settings.iban=el("s_i").value.trim(); settings.cash=el("s_c").value.trim(); touch(); renderAll(); toast("Išsaugota");
+    settings.iban=el("s_i").value.trim(); settings.cash=el("s_c").value.trim(); settings.cashOpening=Math.round((Number(el("s_co").value)||0)*100)/100; touch(); renderAll(); toast("Išsaugota");
   };
   el("chpw").onclick = changePassword;
   el("lk").onclick = ()=>lockNow();
@@ -1047,6 +1119,7 @@ function viewNustatymai(v){
   el("roll").onclick = ()=>{
     if(!confirm("Uždaryti "+settings.year+" m.? Likučiai pereis į „Sena skola“, mokėjimų žurnalas bus išvalytas.")) return;
     const r = rows(); for(const x of r){ const p = plots.find(y=>y.id===x.id); p.apSkola = x.due; }
+    settings.cashOpening = cashBalance(); cashOps = [];
     payments = []; settings.year = Number(settings.year)+1; touch(); renderAll(); toast("Metai uždaryti");
   };
 }
