@@ -1,0 +1,1077 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://api.github.com; img-src data: blob:; base-uri 'none'; form-action 'none'">
+<link rel="icon" href="data:,">
+<title>Žiburėlis kasa</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F6F5EF; --surface:#FFFFFF; --surface-2:#EFEEE6; --surface-3:#E7E6DC;
+  --ink:#1A211C; --ink-soft:#3D4741; --muted:#6E776F; --line:#E0DFD4; --line-2:#CBCABD;
+  --accent:#2F6B4F; --accent-ink:#245840; --accent-soft:#E2EFE7; --on-accent:#FFFFFF;
+  --warn:#8C6210; --warn-soft:#F6EEDA;
+  --crit:#A03528; --crit-soft:#F8E7E3;
+  --info:#2F5F80; --info-soft:#E2EDF4;
+  --shadow:0 1px 2px rgba(26,33,28,.07);
+  --radius:10px;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#121613; --surface:#1A201C; --surface-2:#222924; --surface-3:#2A322C;
+    --ink:#E9EBE5; --ink-soft:#C6CBC3; --muted:#949D95; --line:#2C332E; --line-2:#3C443E;
+    --accent:#77C298; --accent-ink:#8FD3AC; --accent-soft:#1E2F26; --on-accent:#0F1A14;
+    --warn:#E0AC58; --warn-soft:#31281A;
+    --crit:#E38B79; --crit-soft:#33211E;
+    --info:#86B6D6; --info-soft:#1B2833;
+    --shadow:0 1px 2px rgba(0,0,0,.35);
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;line-height:1.45;margin:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:16px}
+h1,h2,h3{font-family:Fraunces,Georgia,serif;font-weight:600;margin:0;text-wrap:balance}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+
+/* gate (setup / unlock) */
+.gate{min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px 40px}
+.gate-card{width:100%;max-width:440px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.gate-card .hd{padding:20px 20px 4px}
+.gate-card .hd h1{font-size:22px}
+.gate-card .hd p{margin:6px 0 0;color:var(--muted);font-size:13px}
+.gate-card .bd{padding:14px 20px 20px;display:grid;gap:12px}
+.gate-card .ft{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.gate-tabs{display:flex;gap:4px;padding:10px 20px 0}
+.lock-ico{width:34px;height:34px;border-radius:9px;background:var(--accent-soft);color:var(--accent-ink);display:grid;place-items:center;margin-bottom:10px}
+.err{background:var(--crit-soft);border:1px solid var(--crit);color:var(--crit);border-radius:8px;padding:8px 11px;font-size:12.5px;line-height:1.5}
+details summary{cursor:pointer;color:var(--muted);font-size:12.5px}
+details[open] summary{margin-bottom:10px}
+
+/* header */
+.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px);margin-top:calc(-1 * env(safe-area-inset-top,0px))}
+.brand{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-block:12px 10px}
+.brand h1{font-size:21px;letter-spacing:-.01em}
+.brand .yr{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);border:1px solid var(--line-2);border-radius:999px;padding:1px 8px}
+.brand .sync{margin-left:auto;font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block;flex:none}
+.dot.ok{background:var(--accent)} .dot.bad{background:var(--crit)} .dot.busy{background:var(--warn)}
+
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}
+.stat{background:var(--surface);padding:9px 10px}
+.stat b{display:block;font-family:"IBM Plex Mono",monospace;font-size:17px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.3}
+.stat span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stat.bad b{color:var(--crit)} .stat.good b{color:var(--accent)}
+
+nav{display:flex;gap:2px;overflow-x:auto;padding-bottom:10px;scrollbar-width:thin}
+nav button{flex:none;background:transparent;border:1px solid transparent;color:var(--muted);font:500 13px Inter,sans-serif;padding:6px 12px;border-radius:999px;cursor:pointer}
+nav button:hover{color:var(--ink)}
+nav button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.banner{border-radius:9px;padding:10px 12px;font-size:13px;line-height:1.5;margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.banner.crit{background:var(--crit-soft);border:1px solid var(--crit);color:var(--crit)}
+.banner.warn{background:var(--warn-soft);border:1px solid var(--warn);color:var(--warn)}
+
+main{padding-block:16px 60px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.panel + .panel{margin-top:14px}
+.panel-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 14px;border-bottom:1px solid var(--line)}
+.panel-hd h2{font-size:15px}
+.panel-hd .sp{margin-left:auto}
+.panel-bd{padding:14px}
+
+.btn{font:500 13px Inter,sans-serif;background:var(--surface-2);color:var(--ink);border:1px solid var(--line-2);border-radius:7px;padding:6px 11px;cursor:pointer;text-decoration:none;display:inline-block;line-height:1.3}
+.btn:hover{background:var(--surface-3)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.pri:hover{filter:brightness(1.06)}
+.btn.dan{color:var(--crit);border-color:var(--crit);background:transparent}
+.btn.sm{font-size:12px;padding:3px 8px}
+.btn.ghost{background:transparent}
+.btn.wide{width:100%;padding:9px 12px;font-size:14px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.link{background:none;border:0;padding:0;color:var(--accent-ink);font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+input,textarea,select{font:inherit;font-size:16px;color:var(--ink);background:var(--surface);border:1px solid var(--line-2);border-radius:7px;padding:6px 9px;max-width:100%}
+@media (min-width:761px){input,textarea,select{font-size:14px}}
+textarea{width:100%;font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.5;resize:vertical}
+label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:3px}
+.field{display:flex;flex-direction:column;min-width:0}
+.field input{width:100%}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+thead th{position:sticky;top:0;background:var(--surface-2);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;z-index:1;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface-2)}
+tr.rowlink{cursor:pointer}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace}
+td.plot{white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-weight:500}
+td.nm{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.z{color:var(--muted);opacity:.55}
+.due{color:var(--crit);font-weight:600}
+.cred{color:var(--info);font-weight:600}
+.okmark{color:var(--accent)}
+tfoot td{border-top:2px solid var(--line-2);font-weight:600;background:var(--surface-2)}
+
+.pill{display:inline-block;font-size:10.5px;letter-spacing:.03em;padding:1px 7px;border-radius:999px;border:1px solid transparent;white-space:nowrap}
+.pill.due{background:var(--crit-soft);color:var(--crit);border-color:var(--crit)}
+.pill.ok{background:var(--accent-soft);color:var(--accent-ink);border-color:var(--accent);font-weight:500}
+.pill.cred{background:var(--info-soft);color:var(--info);border-color:var(--info)}
+.pill.warn{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+
+.hint{color:var(--muted);font-size:12.5px;line-height:1.55}
+.note{background:var(--warn-soft);border:1px solid var(--warn);color:var(--warn);border-radius:8px;padding:9px 12px;font-size:12.5px;line-height:1.5}
+.note.info{background:var(--info-soft);border-color:var(--info);color:var(--info)}
+dl.kv{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;margin:0;font-size:13px}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;font-family:"IBM Plex Mono",monospace;word-break:break-all}
+
+.scrim{position:fixed;inset:0;background:rgba(10,14,12,.45);display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;z-index:50}
+.modal{background:var(--surface);border:1px solid var(--line-2);border-radius:12px;width:100%;max-width:520px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+
+.smslist{display:grid;gap:10px}
+.smscard{border:1px solid var(--line);border-radius:9px;padding:11px 12px;background:var(--surface)}
+.smscard .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
+.smscard .hd .who{font-weight:500}
+.smscard .hd .tel{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--muted)}
+.smscard pre{margin:0 0 8px;white-space:pre-wrap;word-break:break-word;font-family:"IBM Plex Mono",monospace;font-size:12px;line-height:1.5;color:var(--ink-soft);background:var(--surface-2);border-radius:7px;padding:8px 10px}
+
+.prev{border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#f5f5f7}
+.prev iframe{width:100%;height:520px;border:0;display:block;background:#fff}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:999px;font-size:13px;z-index:80;box-shadow:0 4px 18px rgba(0,0,0,.25);max-width:calc(100vw - 32px);text-align:center}
+
+@media (max-width:760px){
+  .top{position:static}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .stat:last-child{grid-column:1/-1}
+  .grid2{grid-template-columns:1fr}
+  .brand h1{font-size:18px}
+}
+@media (max-width:560px){
+  .hm{display:none}
+  td.nm{max-width:150px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+"use strict";
+/* ============================================================================
+   Žiburėlis kasa — учёт взносов SB Žiburėlis.
+   В этом файле НЕТ данных садоводов. Данные хранятся в приватном репозитории
+   GitHub в виде зашифрованного файла (AES-256-GCM, ключ из пароля через
+   PBKDF2-SHA256, 600 000 итераций) и расшифровываются только в браузере.
+   ========================================================================== */
+
+const DEFAULTS = { owner:"aleksandrassukovas-hub", dataRepo:"ziburelis-duomenys", dataPath:"data.enc.json",
+                   pubRepo:"ziburelis-skolos", pubPath:"index.html" };
+const ITER = 600000;
+const IDLE_MS = 15*60*1000;
+const DEV_KEY = "zk.device.v1";
+
+/* Схема участков на плане (координаты в SVG публичной страницы). Не персональные данные. */
+const GEO = {
+ "6-27":[0,0],"6-25":[50,0],"6-23":[100,0],"6-21":[150,0],"6-19":[200,0],"6-17":[250,0],"6-15":[300,0],
+ "6-13":[374,0],"6-11":[424,0],"6-9":[474,0],"6-7":[524,0],"6-5":[574,0],"6-3":[624,0],
+ "6-30":[0,74],"6-28":[100,74],"6-26":[150,74],"6-24":[200,74],"6-22":[250,74],"6-20":[300,74],
+ "6-18":[374,74],"6-14":[424,74],"6-12":[424,118],"6-10":[474,74],"6-8":[524,74],"6-6":[574,74],"6-4":[624,74],"6-2":[674,74],
+ "7-23":[0,176],"7-21":[100,176],"7-19":[150,176],"7-17":[200,176],"7-15":[250,176],"7-13":[300,176],
+ "7-11":[374,176],"7-9":[424,176],"7-7":[474,176],"7-5-1":[524,176],"7-5":[574,176],"7-3":[624,176],"7-1":[624,220]
+};
+const DEFAULT_SMS = "Sveiki, primenu apie SB Žiburėlis nario mokestį už {metai} m.\nSklypas Rudausių sodų {sklypas} — liko mokėti {skola} Eur (kartu su skola už ankstesnį laikotarpį).\nPatikslinti galite čia: {nuoroda}\nSumokėti galite pavedimu: {gavejas}, {iban}, arba grynais adresu {grynais}. Mokėjimo paskirtyje įrašykite savo sklypo adresą.\nDėkoju!";
+
+/* ---------------- состояние ---------------- */
+let screen = "setup";           // setup | unlock | app
+let dev = null;                 // конфиг устройства: репо + зашифрованный токен
+let token = null;               // токен GitHub — только в памяти, только пока разблокировано
+let dataKey = null, dataSalt = null, dataIter = ITER, dataSha = null;
+let plots = [], payments = [], settings = {};
+let tab = "skolos", filter = "all", q = "", staged = null;
+let dirty = false, saving = null, saveTimer = null, conflict = false, saveErr = "", lastSaved = null;
+let lastActive = Date.now();
+
+/* ---------------- утилиты ---------------- */
+const te = new TextEncoder(), td = new TextDecoder();
+const el = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const eur = n => { const v=Math.round((Number(n)||0)*100)/100; return Number.isInteger(v)?String(v):v.toFixed(2).replace(".",","); };
+const p2 = n => String(n).padStart(2,"0");
+const today = () => { const d=new Date(); return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate()); };
+const stamp = () => { const d=new Date(); return today()+" "+p2(d.getHours())+":"+p2(d.getMinutes()); };
+const newId = () => "p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+
+/* ---------------- шифрование ---------------- */
+function b64e(bytes){ const b=new Uint8Array(bytes); let s=""; for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000)); return btoa(s); }
+function b64d(str){ const s=atob(String(str||"").replace(/\s/g,"")); const b=new Uint8Array(s.length); for(let i=0;i<s.length;i++) b[i]=s.charCodeAt(i); return b; }
+async function deriveKey(pass, salt, iter){
+  const base = await crypto.subtle.importKey("raw", te.encode(pass), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",hash:"SHA-256",salt:salt,iterations:iter}, base, {name:"AES-GCM",length:256}, false, ["encrypt","decrypt"]);
+}
+async function seal(key, salt, iter, obj){
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({name:"AES-GCM",iv:iv}, key, te.encode(JSON.stringify(obj)));
+  return {format:"ziburelis-kasa-enc",v:1,alg:"AES-256-GCM",kdf:{name:"PBKDF2",hash:"SHA-256",iter:iter,salt:b64e(salt)},iv:b64e(iv),ct:b64e(ct)};
+}
+async function unseal(key, env){
+  const pt = await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(env.iv)}, key, b64d(env.ct));
+  return JSON.parse(td.decode(pt));
+}
+function envOk(env){ return env && env.format==="ziburelis-kasa-enc" && env.kdf && env.kdf.salt && env.iv && env.ct; }
+
+/* ---------------- GitHub ---------------- */
+class GhError extends Error{ constructor(code,msg,status){ super(msg); this.code=code; this.status=status; } }
+async function gh(method, url, body, tok){
+  let res;
+  try{
+    res = await fetch("https://api.github.com"+url, {
+      method: method, cache: "no-store",
+      headers: Object.assign({Authorization:"Bearer "+(tok||token), Accept:"application/vnd.github+json"}, body?{"Content-Type":"application/json"}:{}),
+      body: body?JSON.stringify(body):undefined
+    });
+  }catch(e){ throw new GhError("network","Нет связи с GitHub. Проверьте интернет и повторите."); }
+  return res;
+}
+const repoUrl = (repo) => "/repos/"+encodeURIComponent(dev.owner)+"/"+encodeURIComponent(repo);
+const fileUrl = (repo,path) => repoUrl(repo)+"/contents/"+String(path).split("/").map(encodeURIComponent).join("/");
+async function ghFail(res){
+  if(res.status===401) return new GhError("auth","GitHub не принял токен: он истёк, отозван или введён с ошибкой.",401);
+  if(res.status===403){
+    let m=""; try{ m=(await res.json()).message||""; }catch(_){}
+    if(/rate limit/i.test(m)) return new GhError("rate","GitHub временно ограничил запросы. Подождите несколько минут.",403);
+    return new GhError("perm","У токена нет прав на это действие (нужно Contents: Read and write).",403);
+  }
+  if(res.status===404) return new GhError("notfound","Не найдено: проверьте логин, имя репозитория и доступ токена к нему.",404);
+  if(res.status===409 || res.status===422) return new GhError("conflict","Файл на GitHub изменился с момента загрузки.",res.status);
+  return new GhError("http","GitHub ответил ошибкой "+res.status+".",res.status);
+}
+async function repoExists(repo, tok){
+  const r = await gh("GET", repoUrl(repo), null, tok);
+  if(r.ok){ const j = await r.json(); return {ok:true, private:!!j.private}; }
+  if(r.status===404) return {ok:false};
+  throw await ghFail(r);
+}
+async function getFile(repo, path, tok){
+  const r = await gh("GET", fileUrl(repo,path), null, tok);
+  if(r.status===404) return null;
+  if(!r.ok) throw await ghFail(r);
+  const j = await r.json();
+  return {sha:j.sha, text: td.decode(b64d(j.content||""))};
+}
+async function putFile(repo, path, text, sha, message, tok){
+  const body = {message:message, content:b64e(te.encode(text))};
+  if(sha) body.sha = sha;
+  const r = await gh("PUT", fileUrl(repo,path), body, tok);
+  if(!r.ok) throw await ghFail(r);
+  const j = await r.json();
+  return j.content.sha;
+}
+
+/* ---------------- конфиг устройства ---------------- */
+function loadDev(){ try{ const j = JSON.parse(localStorage.getItem(DEV_KEY)||"null"); return (j && j.tok) ? j : null; }catch(_){ return null; } }
+function saveDev(d){ try{ localStorage.setItem(DEV_KEY, JSON.stringify(d)); return true; }catch(_){ return false; } }
+function forgetDev(){ try{ localStorage.removeItem(DEV_KEY); }catch(_){} }
+
+/* ---------------- нормализация данных ---------------- */
+function normalize(j){
+  if(!j || !Array.isArray(j.plots) || !Array.isArray(j.payments)) throw new Error("Файл не похож на выгрузку Žiburėlis kasa: нет списков участков и платежей.");
+  const P = j.plots.map(p=>{
+    if(!p || !p.id || !p.street || p.nr==null) throw new Error("В файле есть участок без номера или улицы.");
+    return {id:String(p.id), street:String(p.street), nr:String(p.nr), mokestis:Number(p.mokestis)||0, apSkola:Number(p.apSkola)||0,
+            name:p.name||"", phone:p.phone||"", name2:p.name2||"", phone2:p.phone2||"", email:p.email||"", note:p.note||""};
+  });
+  const ids = new Set(P.map(p=>p.id));
+  const Y = j.payments.map(p=>{
+    const alloc = {}; for(const k of Object.keys(p.alloc||{})){ if(!ids.has(k)) throw new Error("Платёж «"+(p.descr||"")+"» разнесён на несуществующий участок "+k+"."); alloc[k]=Number(p.alloc[k])||0; }
+    return {id:String(p.id||newId()), date:String(p.date||""), descr:String(p.descr||""), amount:Number(p.amount)||0, alloc:alloc};
+  });
+  const s = Object.assign({year:new Date().getFullYear(), payee:"", iban:"", cash:"", publicUrl:"", smsTemplate:DEFAULT_SMS}, j.settings||{});
+  s.year = Number(s.year)||new Date().getFullYear();
+  return {settings:s, plots:P, payments:Y};
+}
+function snapshot(){ return {format:"ziburelis-kasa-data", v:1, savedAt:new Date().toISOString(), settings:settings, plots:plots, payments:payments}; }
+function wipe(){ token=null; dataKey=null; dataSalt=null; dataSha=null; plots=[]; payments=[]; settings={}; staged=null; dirty=false; conflict=false; saveErr=""; }
+
+/* ============================================================================
+   ЭКРАНЫ ВХОДА
+   ========================================================================== */
+function render(){
+  document.querySelectorAll(".scrim").forEach(s=>s.remove());
+  if(screen==="app") return renderApp();
+  if(screen==="unlock") return renderUnlock();
+  return renderSetup("connect");
+}
+const lockSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+
+function renderSetup(mode){
+  const d = dev || DEFAULTS;
+  const create = mode==="create";
+  el("root").innerHTML = '<div class="gate"><div class="gate-card">'
+   + '<div class="hd"><div class="lock-ico">'+lockSvg+'</div><h1>Žiburėlis kasa</h1>'
+   + '<p>'+(create?'Первый запуск: создаём зашифрованное хранилище в приватном репозитории.':'Подключаем это устройство к хранилищу. Нужно один раз на каждом телефоне и компьютере.')+'</p></div>'
+   + '<div class="gate-tabs"><button class="btn sm'+(!create?' pri':'')+'" id="tConnect">Подключить устройство</button>'
+   + '<button class="btn sm'+(create?' pri':'')+'" id="tCreate">Создать хранилище</button></div>'
+   + '<form class="bd" id="setupForm" autocomplete="off">'
+   + '<div id="setupErr" class="err" hidden></div>'
+   + fld("Токен GitHub","s_tok","password","", "github_pat_…")
+   + fld(create?"Новый пароль (от 12 символов)":"Пароль хранилища","s_pw","password","")
+   + (create? fld("Пароль ещё раз","s_pw2","password","") : "")
+   + (create? '<div class="field"><label for="s_file">Файл с данными (.json)</label><input id="s_file" type="file" accept=".json,application/json"></div>'
+             + '<p class="hint" style="margin:0">Выгрузка <span class="mono">SB-Ziburelis-2026-duomenys.json</span> из папки проекта. Она будет зашифрована здесь, в браузере, и только потом отправлена на GitHub.</p>' : "")
+   + '<details><summary>Репозитории</summary><div style="display:grid;gap:10px">'
+   + fld("Логин GitHub","s_owner","text",d.owner)
+   + '<div class="grid2">'+fld("Приватный репо (данные)","s_drepo","text",d.dataRepo)+fld("Файл данных","s_dpath","text",d.dataPath)+'</div>'
+   + '<div class="grid2">'+fld("Публичный репо (страница)","s_prepo","text",d.pubRepo)+fld("Файл страницы","s_ppath","text",d.pubPath)+'</div>'
+   + '</div></details>'
+   + '<button class="btn pri wide" id="setupGo" type="submit">'+(create?'Зашифровать и создать':'Подключить')+'</button>'
+   + '</form>'
+   + '<div class="ft">'+(create?'Пароль нигде не хранится. Забудете его — данные не восстановить, останется только JSON-выгрузка.':'Токен сохранится на этом устройстве в зашифрованном виде. Каждый вход — только пароль.')+'</div>'
+   + '</div></div>';
+  el("tConnect").onclick = e=>{ e.preventDefault(); renderSetup("connect"); };
+  el("tCreate").onclick = e=>{ e.preventDefault(); renderSetup("create"); };
+  el("setupForm").onsubmit = e=>{ e.preventDefault(); (create?doCreate:doConnect)(); };
+  el("s_tok").focus();
+}
+const fld=(lab,id,type,val,ph)=>'<div class="field"><label for="'+id+'">'+esc(lab)+'</label><input id="'+id+'" type="'+type+'" value="'+esc(val)+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+(type==="password"?' autocomplete="new-password"':' autocapitalize="off" spellcheck="false"')+'></div>';
+function setupErr(m){ const b=el("setupErr"); if(!b) return toast(m); b.textContent=m; b.hidden=!m; }
+function busy(id, on, label){ const b=el(id); if(!b) return; b.disabled=on; if(label) b.textContent=label; }
+function readRepoFields(){
+  return {owner:el("s_owner").value.trim(), dataRepo:el("s_drepo").value.trim(), dataPath:el("s_dpath").value.trim()||DEFAULTS.dataPath,
+          pubRepo:el("s_prepo").value.trim(), pubPath:el("s_ppath").value.trim()||DEFAULTS.pubPath};
+}
+
+async function doConnect(){
+  setupErr("");
+  const tok = el("s_tok").value.trim(), pw = el("s_pw").value;
+  const cfg = readRepoFields();
+  if(!tok || !pw) return setupErr("Нужны токен и пароль.");
+  if(!cfg.owner || !cfg.dataRepo) return setupErr("Нужны логин и имя приватного репозитория.");
+  busy("setupGo", true, "Проверяю…");
+  try{
+    dev = Object.assign({}, cfg);
+    const f = await getFile(cfg.dataRepo, cfg.dataPath, tok);
+    if(!f) throw new Error("Файл данных не найден. Проверьте имя репозитория и что у токена есть к нему доступ. Если хранилища ещё нет — вкладка «Создать хранилище».");
+    let env; try{ env = JSON.parse(f.text); }catch(_){ env=null; }
+    if(!envOk(env)) throw new Error("Файл в репозитории — не зашифрованное хранилище Žiburėlis kasa.");
+    busy("setupGo", true, "Проверяю пароль…");
+    const salt = b64d(env.kdf.salt), iter = env.kdf.iter||ITER;
+    const key = await deriveKey(pw, salt, iter);
+    let data; try{ data = await unseal(key, env); }catch(_){ throw new Error("Неверный пароль."); }
+    const n = normalize(data);
+    const tSalt = crypto.getRandomValues(new Uint8Array(16));
+    const tKey = await deriveKey(pw, tSalt, ITER);
+    dev.tok = await seal(tKey, tSalt, ITER, {token:tok});
+    if(!saveDev(dev)) throw new Error("Браузер не дал сохранить настройки (приватный режим?). Вход будет работать только до закрытия вкладки.");
+    token = tok; dataKey = key; dataSalt = salt; dataIter = iter; dataSha = f.sha;
+    settings = n.settings; plots = n.plots; payments = n.payments;
+    lastSaved = null; screen = "app"; tab = "skolos"; render(); toast("Устройство подключено");
+  }catch(e){
+    dev = loadDev();
+    setupErr(e.message||String(e)); busy("setupGo", false, "Подключить");
+  }
+}
+
+async function doCreate(){
+  setupErr("");
+  const tok = el("s_tok").value.trim(), pw = el("s_pw").value, pw2 = el("s_pw2").value;
+  const file = el("s_file").files && el("s_file").files[0];
+  const cfg = readRepoFields();
+  if(!tok) return setupErr("Нужен токен GitHub.");
+  if(pw.length < 12) return setupErr("Пароль короче 12 символов. Надёжнее всего — 4–5 случайных слов подряд.");
+  if(pw !== pw2) return setupErr("Пароли не совпадают.");
+  if(!file) return setupErr("Выберите JSON-файл с данными.");
+  if(!cfg.owner || !cfg.dataRepo) return setupErr("Нужны логин и имя приватного репозитория.");
+  busy("setupGo", true, "Проверяю репозиторий…");
+  try{
+    dev = Object.assign({}, cfg);
+    let n; try{ n = normalize(JSON.parse(await file.text())); }catch(e){ throw new Error(e instanceof SyntaxError ? "Файл не читается как JSON." : e.message); }
+    const repo = await repoExists(cfg.dataRepo, tok);
+    if(!repo.ok) throw new Error("Репозиторий «"+cfg.dataRepo+"» не найден или у токена нет к нему доступа.");
+    if(!repo.private) throw new Error("Репозиторий «"+cfg.dataRepo+"» публичный. Для данных нужен приватный — поменяйте в Settings → Danger Zone → Change visibility.");
+    const exist = await getFile(cfg.dataRepo, cfg.dataPath, tok);
+    if(exist) throw new Error("В репозитории уже есть хранилище. Используйте «Подключить устройство» — перезаписывать его отсюда нельзя.");
+    busy("setupGo", true, "Шифрую…");
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const key = await deriveKey(pw, salt, ITER);
+    settings = n.settings; plots = n.plots; payments = n.payments;
+    const env = await seal(key, salt, ITER, snapshot());
+    busy("setupGo", true, "Отправляю…");
+    const sha = await putFile(cfg.dataRepo, cfg.dataPath, JSON.stringify(env), null, "kasa: sukurta saugykla "+stamp(), tok);
+    const tSalt = crypto.getRandomValues(new Uint8Array(16));
+    const tKey = await deriveKey(pw, tSalt, ITER);
+    dev.tok = await seal(tKey, tSalt, ITER, {token:tok});
+    saveDev(dev);
+    token = tok; dataKey = key; dataSalt = salt; dataIter = ITER; dataSha = sha;
+    lastSaved = new Date(); screen = "app"; tab = "skolos"; render();
+    toast("Хранилище создано. Удалите JSON-файл с компьютера, если он больше не нужен.");
+  }catch(e){
+    wipe(); dev = loadDev();
+    setupErr(e.message||String(e)); busy("setupGo", false, "Зашифровать и создать");
+  }
+}
+
+function renderUnlock(msg){
+  el("root").innerHTML = '<div class="gate"><div class="gate-card">'
+   + '<div class="hd"><div class="lock-ico">'+lockSvg+'</div><h1>Žiburėlis kasa</h1>'
+   + '<p>Хранилище <span class="mono">'+esc(dev.owner+"/"+dev.dataRepo)+'</span></p></div>'
+   + '<form class="bd" id="unlockForm">'
+   + '<input type="text" name="username" autocomplete="username" value="'+esc(dev.owner+"/"+dev.dataRepo)+'" style="display:none" readonly>'
+   + '<div id="setupErr" class="err"'+(msg?'':' hidden')+'>'+esc(msg||"")+'</div>'
+   + '<div class="field"><label for="u_pw">Пароль</label><input id="u_pw" name="password" type="password" autocomplete="current-password"></div>'
+   + '<button class="btn pri wide" id="unlockGo" type="submit">Открыть</button>'
+   + '</form>'
+   + '<div class="ft"><button class="link" id="reconnect">Подключить заново</button><span>·</span><button class="link" id="forget">Забыть это устройство</button></div>'
+   + '</div></div>';
+  el("unlockForm").onsubmit = e=>{ e.preventDefault(); doUnlock(); };
+  el("reconnect").onclick = ()=>renderSetup("connect");
+  el("forget").onclick = ()=>{ if(confirm("Удалить с этого устройства сохранённый токен? Для входа понадобится ввести токен заново.")){ forgetDev(); dev=null; screen="setup"; render(); } };
+  const pw = el("u_pw"); pw.focus();
+}
+async function doUnlock(){
+  setupErr("");
+  const pw = el("u_pw").value;
+  if(!pw) return setupErr("Введите пароль.");
+  busy("unlockGo", true, "Проверяю пароль…");
+  try{
+    const t = dev.tok;
+    const tKey = await deriveKey(pw, b64d(t.kdf.salt), t.kdf.iter||ITER);
+    let tokObj; try{ tokObj = await unseal(tKey, t); }catch(_){ throw new Error("Неверный пароль. Если пароль меняли на другом устройстве — «Подключить заново»."); }
+    busy("unlockGo", true, "Загружаю данные…");
+    token = tokObj.token;
+    await loadRemote(pw);
+    screen = "app"; tab = "skolos"; lastActive = Date.now(); render();
+  }catch(e){
+    wipe();
+    setupErr(e.message||String(e)); busy("unlockGo", false, "Открыть");
+    if(el("u_pw")){ el("u_pw").value=""; el("u_pw").focus(); }
+  }
+}
+/* загрузка и расшифровка файла данных; pw нужен, только если соль файла сменилась */
+async function loadRemote(pw){
+  const f = await getFile(dev.dataRepo, dev.dataPath);
+  if(!f) throw new Error("Файл данных пропал из репозитория «"+dev.dataRepo+"». Восстановите его из истории коммитов на GitHub.");
+  const env = JSON.parse(f.text);
+  if(!envOk(env)) throw new Error("Файл данных повреждён или не зашифрован.");
+  const fileSalt = b64d(env.kdf.salt), iter = env.kdf.iter||ITER;
+  let key = dataKey;
+  if(!key || !sameBytes(fileSalt, dataSalt)){
+    if(!pw) throw new GhError("relock","Пароль сменили на другом устройстве — войдите заново.");
+    key = await deriveKey(pw, fileSalt, iter);
+  }
+  let data; try{ data = await unseal(key, env); }catch(_){ throw new Error("Пароль не подходит к файлу данных. Если пароль меняли на другом устройстве — «Подключить заново»."); }
+  const n = normalize(data);
+  dataKey = key; dataSalt = fileSalt; dataIter = iter; dataSha = f.sha;
+  settings = n.settings; plots = n.plots; payments = n.payments;
+  dirty = false; conflict = false; saveErr = "";
+}
+function sameBytes(a,b){ if(!a||!b||a.length!==b.length) return false; for(let i=0;i<a.length;i++) if(a[i]!==b[i]) return false; return true; }
+
+/* ============================================================================
+   СОХРАНЕНИЕ
+   ========================================================================== */
+function touch(){ dirty = true; saveErr = ""; clearTimeout(saveTimer); saveTimer = setTimeout(flush, 1200); renderSync(); }
+async function flush(){
+  clearTimeout(saveTimer);
+  if(saving){ await saving; if(dirty && !conflict) return flush(); return; }
+  if(!dirty || conflict || !dataKey) return;
+  dirty = false; renderSync("saving");
+  saving = (async()=>{
+    try{
+      const env = await seal(dataKey, dataSalt, dataIter, snapshot());
+      dataSha = await putFile(dev.dataRepo, dev.dataPath, JSON.stringify(env), dataSha, "kasa: "+stamp());
+      lastSaved = new Date(); saveErr = "";
+    }catch(e){
+      dirty = true;
+      if(e.code==="conflict") conflict = true; else saveErr = e.message||"Ошибка сохранения";
+    }
+  })();
+  await saving; saving = null;
+  renderSync(); renderBanner();
+  if(dirty && !conflict && !saveErr) return flush();
+}
+function renderSync(state){
+  const d = el("syncDot"), t = el("syncTxt"); if(!d||!t) return;
+  let k="ok", txt = lastSaved ? "сохранено "+p2(lastSaved.getHours())+":"+p2(lastSaved.getMinutes()) : "загружено";
+  if(state==="saving"){ k="busy"; txt="сохраняю…"; }
+  else if(conflict){ k="bad"; txt="конфликт"; }
+  else if(saveErr){ k="bad"; txt="не сохранено"; }
+  else if(dirty){ k="busy"; txt="есть изменения"; }
+  d.className = "dot "+k; t.textContent = txt;
+}
+function renderBanner(){
+  const b = el("banner"); if(!b) return;
+  if(conflict){
+    b.className="banner crit"; b.hidden=false;
+    b.innerHTML = '<span>Данные изменились на другом устройстве, поэтому последние правки здесь не сохранены.</span>'
+      + '<button class="btn sm" id="bReload">Загрузить свежие данные (правки отсюда пропадут)</button>';
+    el("bReload").onclick = async()=>{ try{ await loadRemote(); lastSaved=null; renderAll(); toast("Загружены свежие данные"); }catch(e){ if(e.code==="relock") return lockNow(e.message); toast(e.message); } };
+  } else if(saveErr){
+    b.className="banner warn"; b.hidden=false;
+    b.innerHTML = '<span>'+esc(saveErr)+'</span><button class="btn sm" id="bRetry">Повторить сохранение</button>';
+    el("bRetry").onclick = ()=>{ saveErr=""; flush(); };
+  } else { b.hidden=true; b.innerHTML=""; }
+}
+window.addEventListener("beforeunload", e=>{ if(screen==="app" && (dirty || saving)){ e.preventDefault(); e.returnValue=""; } });
+
+/* подтягиваем свежие данные при возврате на вкладку (телефон ↔ компьютер) */
+async function refreshIfChanged(manual){
+  if(screen!=="app" || dirty || saving || conflict) { if(manual && dirty) toast("Сначала дождитесь сохранения"); return; }
+  try{
+    const r = await gh("GET", fileUrl(dev.dataRepo, dev.dataPath));
+    if(!r.ok) throw await ghFail(r);
+    const j = await r.json();
+    if(j.sha === dataSha){ if(manual) toast("Данные актуальны"); return; }
+    await loadRemote(); renderAll(); toast("Подтянуты изменения с другого устройства");
+  }catch(e){ if(e.code==="relock") return lockNow(e.message); if(manual) toast(e.message); }
+}
+
+/* ============================================================================
+   БЛОКИРОВКА
+   ========================================================================== */
+async function lockNow(msg){
+  if(dirty || saving){ await flush(); }
+  if(dirty && !msg){ if(!confirm("Есть несохранённые изменения. Заблокировать всё равно? Они пропадут.")) return; }
+  wipe(); screen = dev ? "unlock" : "setup";
+  if(screen==="unlock") renderUnlock(msg); else render();
+}
+["pointerdown","keydown","touchstart","wheel"].forEach(ev=>window.addEventListener(ev,()=>{ lastActive=Date.now(); },{passive:true}));
+setInterval(()=>{ if(screen==="app" && Date.now()-lastActive>IDLE_MS && !dirty && !saving) lockNow("Заблокировано после 15 минут простоя."); }, 30000);
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState!=="visible" || screen!=="app") return;
+  if(Date.now()-lastActive>IDLE_MS && !dirty && !saving) return lockNow("Заблокировано после 15 минут простоя.");
+  refreshIfChanged(false);
+});
+
+/* ============================================================================
+   ПРИЛОЖЕНИЕ
+   ========================================================================== */
+function paidOf(id){ let s=0; for(const p of payments){ if(p.alloc && p.alloc[id]) s+=Number(p.alloc[id])||0; } return Math.round(s*100)/100; }
+function geoOrder(p){ const g=GEO[p.id]; return g ? g[1]*1000+g[0] : 99999; }
+function rows(){
+  return plots.map(p=>{
+    const paid = paidOf(p.id);
+    const due = Math.round(((Number(p.mokestis)||0)+(Number(p.apSkola)||0)-paid)*100)/100;
+    return Object.assign({},p,{paid:paid,due:due});
+  }).sort((a,b)=> a.street===b.street ? geoOrder(a)-geoOrder(b) || a.nr.localeCompare(b.nr,undefined,{numeric:true}) : a.street.localeCompare(b.street));
+}
+function totals(){
+  const r = rows();
+  const charged = r.reduce((s,x)=>s+(Number(x.mokestis)||0)+(Number(x.apSkola)||0),0);
+  const paid = r.reduce((s,x)=>s+x.paid,0);
+  const debtors = r.filter(x=>x.due>0);
+  return {charged:charged,paid:paid,left:charged-paid,clean:r.filter(x=>x.due<=0).length,n:r.length,
+          debtors:debtors.length,debtSum:debtors.reduce((s,x)=>s+x.due,0)};
+}
+
+const TABS = [["skolos","Долги"],["mokejimai","Платежи"],["kontaktai","Контакты"],["sms","SMS"],["puslapis","Публичная страница"],["nustatymai","Настройки"]];
+function renderApp(){
+  el("root").innerHTML = '<div class="top"><div class="wrap">'
+   + '<div class="brand"><h1>SB Žiburėlis · kasa</h1><span class="yr" id="yrBadge"></span>'
+   + '<span class="sync"><span class="dot" id="syncDot"></span><span id="syncTxt"></span>'
+   + '<button class="btn sm ghost" id="reload" title="Подтянуть изменения с GitHub" aria-label="Обновить">↻</button>'
+   + '<button class="btn sm ghost" id="lockBtn" title="Заблокировать" aria-label="Заблокировать">'+lockSvg.replace('width="18" height="18"','width="14" height="14"')+'</button></span></div>'
+   + '<div class="stats" id="stats"></div><nav id="nav" role="tablist"></nav></div></div>'
+   + '<main class="wrap"><div id="banner" class="banner" hidden></div><div id="view"></div></main>';
+  el("reload").onclick = ()=>refreshIfChanged(true);
+  el("lockBtn").onclick = ()=>lockNow();
+  renderAll();
+}
+function renderAll(){ if(screen!=="app") return; renderStats(); renderNav(); renderView(); el("yrBadge").textContent=settings.year; renderSync(); renderBanner(); }
+function renderStats(){
+  const t = totals();
+  el("stats").innerHTML = tile(eur(t.charged)+" €","Priskaičiuota","") + tile(eur(t.paid)+" €","Sumokėta","good")
+    + tile(eur(t.left)+" €","Liko mokėti","bad") + tile(t.clean+" / "+t.n,"Sklypų be skolos","")
+    + tile(t.debtors+" · "+eur(t.debtSum)+" €","Skolininkai","bad");
+}
+const tile=(b,s,c)=>'<div class="stat '+c+'"><b>'+esc(b)+'</b><span>'+esc(s)+'</span></div>';
+function renderNav(){
+  el("nav").innerHTML = TABS.map(([k,l])=>'<button role="tab" data-t="'+k+'" aria-selected="'+(k===tab)+'">'+l+'</button>').join("");
+  el("nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;renderNav();renderView();window.scrollTo({top:0});});
+}
+function renderView(){
+  const v = el("view");
+  ({skolos:viewSkolos,mokejimai:viewMokejimai,kontaktai:viewKontaktai,sms:viewSms,puslapis:viewPuslapis,nustatymai:viewNustatymai})[tab](v);
+}
+
+/* ---------------- 1. Долги ---------------- */
+function viewSkolos(v){
+  const r = rows().filter(x=>{
+    if(filter==="debt" && x.due<=0) return false;
+    if(filter==="paid" && x.due>0) return false;
+    if(q){ const s=(x.id+" "+x.street+" "+x.nr+" "+x.name+" "+(x.name2||"")).toLowerCase(); if(!s.includes(q.toLowerCase())) return false; }
+    return true;
+  });
+  const t = totals();
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Сводка по участкам</h2><span class="sp"></span><div class="toolbar">'
+    + seg("filter",[["all","Все"],["debt","Должники"],["paid","Без долга"]],filter)
+    + '<input id="q" type="search" placeholder="Участок или имя" value="'+esc(q)+'" style="width:180px"></div></div>'
+    + '<div class="tablewrap"><table><thead><tr><th>Sklypas</th><th>Vardas</th><th class="r hm">Mokestis</th><th class="r hm">Sena skola</th><th class="r hm">Sumokėta</th><th class="r">Liko</th><th class="hm"></th></tr></thead><tbody>'
+    + r.map(x=>'<tr class="rowlink" data-id="'+esc(x.id)+'"><td class="plot">'+esc(x.street+" "+x.nr)+'</td>'
+        + '<td class="nm">'+esc(x.name||"—")+(x.note?' <span class="pill warn" title="'+esc(x.note)+'">!</span>':'')+'</td>'
+        + '<td class="r hm">'+eur(x.mokestis)+'</td><td class="r hm '+(x.apSkola?"":"z")+'">'+eur(x.apSkola)+'</td>'
+        + '<td class="r hm '+(x.paid?"":"z")+'">'+eur(x.paid)+'</td>'
+        + '<td class="r '+(x.due>0?"due":(x.due<0?"cred":"okmark"))+'">'+(x.due>0?eur(x.due):(x.due<0?eur(x.due):"✓"))+'</td>'
+        + '<td class="r hm"><button class="btn sm ghost edit" data-id="'+esc(x.id)+'">править</button></td></tr>').join("")
+    + '</tbody><tfoot><tr><td colspan="2">Итого '+r.length+' из '+t.n+'</td>'
+    + '<td class="r hm">'+eur(r.reduce((s,x)=>s+(+x.mokestis||0),0))+'</td><td class="r hm">'+eur(r.reduce((s,x)=>s+(+x.apSkola||0),0))+'</td>'
+    + '<td class="r hm">'+eur(r.reduce((s,x)=>s+x.paid,0))+'</td><td class="r due">'+eur(r.reduce((s,x)=>s+x.due,0))+'</td><td class="hm"></td></tr></tfoot></table></div></div>';
+  el("q").oninput = e => { q=e.target.value; const p=e.target.selectionStart; viewSkolos(v); const n=el("q"); n.focus(); try{ n.setSelectionRange(p,p); }catch(_){} };
+  v.querySelectorAll("[data-seg=filter] button").forEach(b=>b.onclick=()=>{filter=b.dataset.v;viewSkolos(v);});
+  v.querySelectorAll("tr.rowlink").forEach(tr=>tr.onclick=()=>editPlot(tr.dataset.id));
+}
+function seg(name,opts,cur){ return '<span data-seg="'+name+'" class="toolbar" style="gap:2px">'+opts.map(([k,l])=>'<button class="btn sm'+(k===cur?" pri":"")+'" data-v="'+k+'">'+l+'</button>').join("")+'</span>'; }
+function editPlot(id){
+  const p = plots.find(x=>x.id===id); if(!p) return;
+  modal('Участок '+p.street+" "+p.nr,
+    '<div class="grid2">'+f("Mokestis "+settings.year,"m_mok","number",p.mokestis)+f("Sena skola (AP skola)","m_ap","number",p.apSkola)
+    + f("Vardas","m_name","text",p.name)+f("Telefonas","m_tel","tel",p.phone)+f("Vardas 2","m_name2","text",p.name2||"")+f("Telefonas 2","m_tel2","tel",p.phone2||"")+'</div>'
+    + '<div style="margin-top:10px">'+f("El. paštas","m_mail","email",p.email||"")+'</div>'
+    + '<div class="field" style="margin-top:10px"><label for="m_note">Заметка</label><textarea id="m_note" rows="2">'+esc(p.note||"")+'</textarea></div>'
+    + '<p class="hint" style="margin:10px 0 0">Оплачено за '+settings.year+': <b class="mono">'+eur(paidOf(p.id))+' €</b> — считается из журнала платежей.</p>',
+    ()=>{
+      p.mokestis=Number(el("m_mok").value)||0; p.apSkola=Number(el("m_ap").value)||0;
+      p.name=el("m_name").value.trim(); p.phone=el("m_tel").value.trim(); p.name2=el("m_name2").value.trim();
+      p.phone2=el("m_tel2").value.trim(); p.email=el("m_mail").value.trim(); p.note=el("m_note").value.trim();
+      touch(); renderAll(); toast("Изменено");
+    });
+}
+const f=(lab,id,type,val)=>'<div class="field"><label for="'+id+'">'+esc(lab)+'</label><input id="'+id+'" type="'+type+'" value="'+esc(val)+'"'+(type==="number"?' step="any" inputmode="decimal"':'')+'></div>';
+
+/* ---------------- 2. Платежи ---------------- */
+function viewMokejimai(v){
+  const list = payments.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Разнос выписки</h2><span class="sp"></span><button class="btn" id="addOne">Внести платёж вручную</button></div>'
+   + '<div class="panel-bd"><p class="hint" style="margin:0 0 8px">Вставьте строки выписки Revolut — CSV с заголовком или просто скопированный текст. Номер участка берётся из описания (<span class="mono">6-20,23</span>, <span class="mono">7-5-1</span>); если его нет — ищется по фамилии.</p>'
+   + '<textarea id="stmt" rows="6" placeholder="2026-09-15&#9;Payment from VARDAS PAVARDĖ 6-11&#9;40.00"></textarea>'
+   + '<div class="toolbar" style="margin-top:8px"><button class="btn pri" id="parseBtn">Разобрать</button><button class="btn ghost" id="clearBtn">Очистить</button></div>'
+   + '<div id="stage"></div></div></div>'
+   + '<div class="panel"><div class="panel-hd"><h2>Журнал '+settings.year+'</h2><span class="sp"></span><span class="hint">'+list.length+' записей · '+eur(list.reduce((s,x)=>s+(+x.amount||0),0))+' €</span></div>'
+   + '<div class="tablewrap"><table><thead><tr><th>Data</th><th>Operacija</th><th>Sklypai</th><th class="r">Suma</th><th></th></tr></thead><tbody>'
+   + list.map(p=>'<tr><td class="mono">'+esc(p.date)+'</td><td>'+esc(p.descr)+'</td>'
+       + '<td class="mono">'+Object.keys(p.alloc||{}).map(k=>esc(k)+"&nbsp;"+eur(p.alloc[k])).join(" · ")+'</td>'
+       + '<td class="r">'+eur(p.amount)+'</td><td class="r"><button class="btn sm ghost del" data-id="'+esc(p.id)+'">удалить</button></td></tr>').join("")
+   + '</tbody></table></div></div>';
+  el("parseBtn").onclick = ()=>{ staged = parseStatement(el("stmt").value); renderStage(); if(!staged.length) toast("Не нашёл ни одного поступления в тексте"); };
+  el("clearBtn").onclick = ()=>{ el("stmt").value=""; staged=null; renderStage(); };
+  el("addOne").onclick = manualPayment;
+  v.querySelectorAll(".del").forEach(b=>b.onclick=()=>{
+    const p = payments.find(x=>x.id===b.dataset.id); if(!p) return;
+    if(!confirm("Удалить платёж «"+p.descr+"» на "+eur(p.amount)+" €?")) return;
+    payments = payments.filter(x=>x.id!==b.dataset.id); touch(); renderAll(); toast("Удалено");
+  });
+  renderStage();
+}
+function renderStage(){
+  const box = el("stage"); if(!box) return;
+  if(!staged || !staged.length){ box.innerHTML=""; return; }
+  box.innerHTML = '<div style="margin-top:12px" class="tablewrap"><table><thead><tr><th style="width:28px"></th><th>Data</th><th>Operacija</th><th>Sklypai</th><th class="r">Suma</th><th>Статус</th></tr></thead><tbody>'
+   + staged.map((s,i)=>'<tr><td><input type="checkbox" data-i="'+i+'" class="chk" aria-label="Записать строку"'+(s.take?" checked":"")+(s.bad?" disabled":"")+'></td>'
+      + '<td><input type="date" data-i="'+i+'" class="fd" value="'+esc(s.date)+'" style="width:150px"></td>'
+      + '<td><input type="text" data-i="'+i+'" class="ft" value="'+esc(s.descr)+'" style="width:100%;min-width:200px"></td>'
+      + '<td><input type="text" data-i="'+i+'" class="fp mono" value="'+esc(Object.keys(s.alloc).join(", "))+'" style="width:130px"></td>'
+      + '<td class="r"><input type="number" step="any" inputmode="decimal" data-i="'+i+'" class="fa" value="'+s.amount+'" style="width:84px;text-align:right"></td>'
+      + '<td>'+statusPill(s)+'</td></tr>').join("")
+   + '</tbody></table></div><div class="toolbar" style="margin-top:10px"><button class="btn pri" id="commit">Записать отмеченные</button>'
+   + '<span class="hint">Участки через запятую. Если сумма ровно покрывает их долги — разносится по долгам, иначе поровну.</span></div>';
+  box.querySelectorAll(".chk").forEach(c=>c.onchange=()=>{staged[+c.dataset.i].take=c.checked;});
+  box.querySelectorAll(".fd").forEach(c=>c.onchange=()=>{staged[+c.dataset.i].date=c.value;restage();});
+  box.querySelectorAll(".ft").forEach(c=>c.onchange=()=>{staged[+c.dataset.i].descr=c.value;restage();});
+  box.querySelectorAll(".fa").forEach(c=>c.onchange=()=>{const s=staged[+c.dataset.i];s.amount=Number(c.value)||0;s.alloc=allocSmart(Object.keys(s.alloc),s.amount);restage();});
+  box.querySelectorAll(".fp").forEach(c=>c.onchange=()=>{
+    const s=staged[+c.dataset.i];
+    const ids=c.value.split(",").map(x=>x.trim()).filter(Boolean).filter(x=>plots.some(p=>p.id===x));
+    s.alloc=allocSmart(ids,s.amount); s.guess=false; if(ids.length && !s.dup) s.take=true; restage();
+  });
+  el("commit").onclick = commitStaged;
+}
+function restage(){ staged.forEach(s=>{ if(!s.bad) s.dup=isDup(s); }); renderStage(); }
+function statusPill(s){
+  if(s.bad) return '<span class="pill due">строка не разобрана</span>';
+  if(s.dup) return '<span class="pill warn">уже в журнале</span>';
+  if(!Object.keys(s.alloc).length) return '<span class="pill due">участок не определён</span>';
+  if(s.guess) return '<span class="pill cred">по фамилии — проверьте</span>';
+  return '<span class="pill ok">готово</span>';
+}
+function isDup(s){ return payments.some(p=>p.date===s.date && Math.abs((+p.amount||0)-s.amount)<0.005 && (p.descr||"").trim()===(s.descr||"").trim()); }
+function split(ids,amount){
+  const a={}; if(!ids.length) return a;
+  const each = Math.round((amount/ids.length)*100)/100;
+  ids.forEach((id,i)=> a[id] = i===ids.length-1 ? Math.round((amount-each*(ids.length-1))*100)/100 : each);
+  return a;
+}
+function allocSmart(ids,amount){
+  if(!ids.length) return {};
+  const r = rows();
+  const dues = ids.map(id=>{ const x=r.find(p=>p.id===id); return x?x.due:0; });
+  const sum = dues.reduce((s,d)=>s+d,0);
+  if(ids.length>1 && dues.every(d=>d>0) && Math.abs(sum-amount)<0.005){ const a={}; ids.forEach((id,i)=>a[id]=dues[i]); return a; }
+  return split(ids,amount);
+}
+function norm(s){ return String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toUpperCase(); }
+function findPlots(descr){
+  const ids=[]; const d=descr||"";
+  const re=/\b([67])\s*-\s*(\d+(?:-\d+)?)((?:\s*,\s*\d+(?:-\d+)?)+)?/g; let m;
+  while((m=re.exec(d))){
+    const st=m[1]; const first=st+"-"+m[2];
+    if(plots.some(p=>p.id===first) && !ids.includes(first)) ids.push(first);
+    if(m[3]) m[3].split(",").map(x=>x.trim()).filter(Boolean).forEach(nr=>{ const id=st+"-"+nr; if(plots.some(p=>p.id===id) && !ids.includes(id)) ids.push(id); });
+  }
+  if(ids.length) return {ids:ids,guess:false};
+  const D=norm(d);
+  const hits=plots.filter(p=>(norm(p.name)+" "+norm(p.name2)).split(/[^A-Z]+/).filter(t=>t.length>=5).some(t=>new RegExp("\\b"+t+"\\b").test(D))).map(p=>p.id);
+  return {ids:hits,guess:hits.length>0};
+}
+function parseStatement(text){
+  const lines = String(text||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if(!lines.length) return [];
+  const out=[]; const hdr=lines[0].toLowerCase();
+  let cols=null, iA=-1, iD=-1, iT=-1;
+  if(hdr.includes("amount") && (hdr.includes("description") || hdr.includes("completed"))){
+    cols = splitCsv(lines[0]).map(c=>c.trim().toLowerCase());
+    iA = cols.findIndex(c=>c==="amount"); iD = cols.findIndex(c=>c==="description");
+    iT = cols.findIndex(c=>c.includes("completed date")); if(iT<0) iT = cols.findIndex(c=>c.includes("date"));
+    if(iA<0 || iD<0) cols=null;
+  }
+  for(let i=cols?1:0;i<lines.length;i++){
+    const line = lines[i];
+    if(cols){
+      const c = splitCsv(line); const extra = c.length - cols.length;
+      if(extra===0 || (extra>0 && iD<iA)){
+        const amt = Number(String(c[iA+(extra>0?extra:0)]||"").replace(/[\s ]/g,"").replace(",","."));
+        const descr = extra>0 ? c.slice(iD, iD+extra+1).join(",").trim() : (c[iD]||"").trim();
+        if(isFinite(amt) && amt>0) out.push(mk(pickDate(c[iT]||""), descr, amt));
+        continue;
+      }
+      out.push({date:today(), descr:line, amount:0, alloc:{}, guess:false, dup:false, take:false, bad:true});
+      continue;
+    }
+    const r = parseLoose(line); if(r) out.push(r);
+  }
+  return out;
+}
+function parseLoose(line){
+  const amtM = line.match(/(?:^|[\s,;|])(-?\d+(?:[.,]\d{1,2})?)\s*(?:EUR|€)?\s*$/);
+  if(!amtM) return null;
+  const amt = Number(amtM[1].replace(",","."));
+  if(!isFinite(amt) || amt<=0) return null;
+  let rest = line.slice(0, amtM.index + amtM[0].indexOf(amtM[1])).trim().replace(/[\t;|]+/g," ").trim();
+  const dM = rest.match(/(\d{4}-\d{2}-\d{2}|\d{1,2}[./]\d{1,2}[./]\d{2,4})/);
+  const date = pickDate(dM?dM[1]:"");
+  if(dM) rest = (rest.slice(0,dM.index)+" "+rest.slice(dM.index+dM[1].length)).trim();
+  return mk(date, rest.replace(/^[\s,;]+|[\s,;]+$/g,"").replace(/\s{2,}/g," "), amt);
+}
+function mk(date,descr,amt){
+  const r = findPlots(descr); const a = Math.round(amt*100)/100;
+  const s = {date:date||today(), descr:descr, amount:a, alloc:allocSmart(r.ids,a), guess:r.guess};
+  s.dup = isDup(s); s.take = !s.dup && r.ids.length>0; return s;
+}
+function pickDate(s){
+  s=String(s||"").trim(); let m;
+  if((m=s.match(/(\d{4})-(\d{2})-(\d{2})/))) return m[0];
+  if((m=s.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/))) return m[3]+"-"+p2(m[2])+"-"+p2(m[1]);
+  if((m=s.match(/(\d{1,2})[./](\d{1,2})[./](\d{2})$/))) return "20"+m[3]+"-"+p2(m[2])+"-"+p2(m[1]);
+  return "";
+}
+function splitCsv(line){
+  const out=[]; let cur="", inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(ch==='"'){ if(inQ && line[i+1]==='"'){cur+='"';i++;} else inQ=!inQ; }
+    else if((ch===","||ch===";"||ch==="\t") && !inQ){ out.push(cur); cur=""; }
+    else cur+=ch;
+  }
+  out.push(cur); return out;
+}
+function commitStaged(){
+  const take = (staged||[]).filter(s=>s.take && s.amount>0 && !s.bad && Object.keys(s.alloc).length);
+  if(!take.length) return toast("Нечего записывать");
+  for(const s of take) payments.push({id:newId(), date:s.date, descr:s.descr, amount:s.amount, alloc:s.alloc});
+  staged = (staged||[]).filter(s=>!take.includes(s)); if(!staged.length) staged=null;
+  touch(); renderAll(); toast("Записано: "+take.length);
+}
+function manualPayment(){
+  modal("Новый платёж",
+    '<div class="grid2">'+f("Дата","mp_d","date",today())+f("Сумма, €","mp_a","number","")+'</div>'
+    + '<div style="margin-top:10px">'+f("Описание","mp_t","text","")+'</div>'
+    + '<div style="margin-top:10px">'+f("Участки через запятую (6-11, 7-5-1)","mp_p","text","")+'</div>',
+    ()=>{
+      const amt=Number(el("mp_a").value)||0;
+      const ids=el("mp_p").value.split(",").map(x=>x.trim()).filter(x=>plots.some(p=>p.id===x));
+      if(amt<=0 || !ids.length){ toast("Нужны сумма и хотя бы один существующий участок"); return false; }
+      payments.push({id:newId(), date:el("mp_d").value||today(), descr:el("mp_t").value.trim()||"Įnašas", amount:amt, alloc:allocSmart(ids,amt)});
+      touch(); renderAll(); toast("Записано");
+    });
+}
+
+/* ---------------- 3. Контакты ---------------- */
+function viewKontaktai(v){
+  const r = rows(); const noPhone = r.filter(x=>!x.phone && !x.phone2);
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Справочник садоводов</h2><span class="sp"></span>'
+   + '<span class="hint">'+r.length+' участков · '+new Set(r.map(x=>x.phone).filter(Boolean)).size+' уникальных номеров</span></div>'
+   + (noPhone.length?'<div class="panel-bd" style="padding-bottom:0"><div class="note">Без телефона: '+noPhone.map(x=>esc(x.street+" "+x.nr+" ("+(x.name||"—")+")")).join(", ")+'</div></div>':'')
+   + '<div class="tablewrap"><table><thead><tr><th>Sklypas</th><th>Vardas</th><th>Telefonas</th><th>Vardas 2</th><th>Telefonas 2</th><th>El. paštas</th><th></th></tr></thead><tbody>'
+   + r.map(x=>'<tr><td class="plot">'+esc(x.street+" "+x.nr)+'</td><td class="nm">'+esc(x.name||"—")+'</td>'
+      + '<td class="mono">'+(x.phone?'<a href="tel:'+esc(x.phone)+'">'+esc(x.phone)+'</a>':'—')+'</td>'
+      + '<td class="nm">'+esc(x.name2||"")+'</td><td class="mono">'+(x.phone2?'<a href="tel:'+esc(x.phone2)+'">'+esc(x.phone2)+'</a>':'')+'</td>'
+      + '<td class="nm">'+esc(x.email||"")+'</td><td class="r"><button class="btn sm ghost edit" data-id="'+esc(x.id)+'">править</button></td></tr>').join("")
+   + '</tbody></table></div></div>'
+   + '<div class="panel"><div class="panel-bd"><div class="toolbar"><button class="btn" id="csvK">Скачать контакты CSV</button><button class="btn ghost" id="addPlot">Добавить участок</button></div>'
+   + '<p class="hint" style="margin:10px 0 0">CSV скачивается незашифрованным — не выкладывайте его в публичные места.</p></div></div>';
+  v.querySelectorAll(".edit").forEach(b=>b.onclick=()=>editPlot(b.dataset.id));
+  el("csvK").onclick = ()=>downloadCsv("SB-Ziburelis-kontaktai-"+settings.year+".csv", ["Sklypas","Vardas","Telefonas","Vardas 2","Telefonas 2","El pastas"], r.map(x=>[x.street+" "+x.nr,x.name,x.phone,x.name2,x.phone2,x.email]));
+  el("addPlot").onclick = addPlot;
+}
+function addPlot(){
+  modal("Новый участок",
+    '<div class="grid2">'+f("Улица (6-oji / 7-oji)","ap_s","text","6-oji")+f("Номер","ap_n","text","")+f("Mokestis","ap_m","number","40")+f("Sena skola","ap_ap","number","0")+f("Vardas","ap_name","text","")+f("Telefonas","ap_tel","tel","")+'</div>'
+    + '<p class="hint" style="margin:10px 0 0">Новый участок попадёт в таблицы, но не на схему публичной страницы — её план задан в коде.</p>',
+    ()=>{
+      const st=el("ap_s").value.trim(), nr=el("ap_n").value.trim();
+      if(!/^[67]-oji$/.test(st) || !nr){ toast("Улица — 6-oji или 7-oji, номер обязателен"); return false; }
+      const id = st[0]+"-"+nr;
+      if(plots.some(p=>p.id===id)){ toast("Такой участок уже есть"); return false; }
+      plots.push({id:id,street:st,nr:nr,mokestis:Number(el("ap_m").value)||0,apSkola:Number(el("ap_ap").value)||0,name:el("ap_name").value.trim(),phone:el("ap_tel").value.trim(),name2:"",phone2:"",email:"",note:""});
+      touch(); renderAll(); toast("Участок добавлен");
+    });
+}
+
+/* ---------------- 4. SMS ---------------- */
+function smsText(x){
+  return (settings.smsTemplate||DEFAULT_SMS).replace(/{metai}/g,settings.year).replace(/{sklypas}/g,x.street+" "+x.nr).replace(/{skola}/g,eur(x.due))
+    .replace(/{nuoroda}/g,settings.publicUrl||"").replace(/{gavejas}/g,settings.payee||"").replace(/{iban}/g,settings.iban||"").replace(/{grynais}/g,settings.cash||"");
+}
+function smsHref(tel,txt){ const ios=/iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent); return "sms:"+tel+(ios?"&":"?")+"body="+encodeURIComponent(txt); }
+function viewSms(v){
+  const d = rows().filter(x=>x.due>0); const seen = {};
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Напоминания должникам</h2><span class="sp"></span><span class="hint">'+d.length+' участков · '+eur(d.reduce((s,x)=>s+x.due,0))+' €</span></div>'
+   + '<div class="panel-bd"><div class="toolbar" style="margin-bottom:12px"><button class="btn" id="copyAll">Скопировать все тексты</button><button class="btn" id="csvS">Скачать CSV должников</button><button class="btn ghost" id="editTpl">Шаблон сообщения</button></div>'
+   + '<div class="smslist">'
+   + d.map(x=>{
+       const tel = x.phone || x.phone2 || ""; const dup = tel && seen[tel]; if(tel) seen[tel]=true; const txt = smsText(x);
+       return '<div class="smscard"><div class="hd"><span class="pill due">'+eur(x.due)+' €</span><span class="who">'+esc(x.street+" "+x.nr)+' · '+esc(x.name||"—")+'</span>'
+        + '<span class="tel">'+(tel?esc(tel):'<span class="pill warn">нет номера</span>')+'</span>'+(dup?'<span class="pill warn">тот же номер, что выше</span>':'')+'</div>'
+        + '<pre>'+esc(txt)+'</pre><div class="toolbar">'
+        + (tel?'<a class="btn pri" href="'+esc(smsHref(tel,txt))+'">Открыть SMS</a>':'')
+        + '<button class="btn copy" data-t="'+esc(txt)+'">Скопировать текст</button>'
+        + (tel?'<button class="btn ghost copy" data-t="'+esc(tel)+'">Скопировать номер</button>':'')+'</div></div>';
+     }).join("")
+   + '</div></div></div>';
+  v.querySelectorAll(".copy").forEach(b=>b.onclick=()=>copy(b.dataset.t));
+  el("copyAll").onclick = ()=>copy(d.map(x=>x.street+" "+x.nr+" — "+eur(x.due)+" EUR · "+(x.name||"—")+" · "+(x.phone||x.phone2||"NĖRA NUMERIO")+"\n"+smsText(x)).join("\n"+"-".repeat(44)+"\n"));
+  el("csvS").onclick = ()=>downloadCsv("SB-Ziburelis-skolininkai-"+today()+".csv", ["Gatve","Sklypas","Skola EUR","Vardas","Telefonas","Vardas 2","Telefonas 2"], d.map(x=>[x.street,x.nr,x.due,x.name,x.phone,x.name2,x.phone2]));
+  el("editTpl").onclick = ()=>modal("Шаблон SMS",
+    '<div class="field"><label for="tpl">Текст</label><textarea id="tpl" rows="8">'+esc(settings.smsTemplate||DEFAULT_SMS)+'</textarea></div>'
+    + '<p class="hint" style="margin:8px 0 0">Подстановки: <span class="mono">{sklypas} {skola} {metai} {nuoroda} {gavejas} {iban} {grynais}</span></p>',
+    ()=>{ settings.smsTemplate = el("tpl").value; touch(); renderView(); toast("Шаблон изменён"); });
+}
+
+/* ---------------- 5. Публичная страница ---------------- */
+function publicHtml(){
+  const r = rows(), t = totals(), d = today();
+  const box = id=>{
+    const g = GEO[id]; if(!g) return ""; const x = r.find(p=>p.id===id); if(!x) return "";
+    const due = x.due>0, fill = due?"#fdeceb":"#eaf7ec", stroke = due?"#d70015":"#248a3d";
+    return '<g><rect x="'+g[0]+'" y="'+g[1]+'" width="48" height="42" rx="4" fill="'+fill+'" stroke="'+stroke+'" stroke-width="1.2"/>'
+      + '<text x="'+(g[0]+24)+'" y="'+(g[1]+20)+'" text-anchor="middle" class="'+(x.nr.length>2?"sm":"nr")+'">'+esc(x.nr)+'</text>'
+      + '<text x="'+(g[0]+24)+'" y="'+(g[1]+34)+'" text-anchor="middle" class="'+(due?"amt":"paid")+'">'+(due?esc(eur(x.due))+" €":"✓")+'</text></g>';
+  };
+  const svg = '<svg viewBox="0 0 724 298" xmlns="http://www.w3.org/2000/svg" class="plan-svg" role="img" aria-label="Sklypu planas su isiskolinimais">'
+    + '<style>.nr{font:700 13px -apple-system,Segoe UI,sans-serif;fill:#111}.sm{font:700 11px -apple-system,Segoe UI,sans-serif;fill:#111}'
+    + '.amt{font:600 9px -apple-system,Segoe UI,sans-serif;fill:#a00}.paid{font:700 11px -apple-system,Segoe UI,sans-serif;fill:#248a3d}'
+    + '.st{font:600 11px -apple-system,Segoe UI,sans-serif;fill:#6b6b70}.sd{font:600 10px -apple-system,Segoe UI,sans-serif;fill:#6b6b70}</style>'
+    + Object.keys(GEO).map(box).join("")
+    + '<g><rect x="674" y="0" width="48" height="42" rx="4" fill="#f0f0f2" stroke="#c7c7cc" stroke-width="1.2"/><text x="698" y="26" text-anchor="middle" class="sd">ŠD</text></g>'
+    + '<text x="0" y="60" class="st">Rudausių sodų 6-oji g.</text><text x="0" y="284" class="st">Rudausių sodų 7-oji g.</text></svg>';
+  const trs = r.map(x=>'<tr'+(x.due>0?' class="debt"':'')+'><td>'+esc(x.street+" "+x.nr)+'</td><td>'+eur(x.mokestis)+'</td>'
+    + '<td'+(x.apSkola?'':' class="z"')+'>'+eur(x.apSkola)+'</td><td'+(x.paid?'':' class="z"')+'>'+eur(x.paid)+'</td>'
+    + '<td>'+(x.due>0?eur(x.due)+' €':(x.due<0?eur(x.due)+' €':'<span class="paid">✓</span>'))+'</td></tr>').join("\n");
+  return '<!doctype html><html lang="lt"><head><meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<meta name="robots" content="noindex, nofollow">\n'
+  + '<title>SB Žiburėlis — įsiskolinimai</title>\n<style>\n'
+  + ':root{--bg:#f5f5f7;--card:#fff;--line:#e2e2e6;--mut:#6b6b70;--bad:#d70015;--ok:#248a3d;--txt:#111}\n'
+  + '*{box-sizing:border-box}body{margin:0;font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",Segoe UI,sans-serif;background:var(--bg);color:var(--txt)}\n'
+  + 'header{padding:22px 18px 14px;text-align:center}h1{margin:0 0 4px;font-size:21px}.sub{color:var(--mut);font-size:13px}\n'
+  + '.wrap{max-width:760px;margin:0 auto;padding:0 16px 40px}\n.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}\n'
+  + '.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 8px;text-align:center}\n'
+  + '.stat b{display:block;font-size:17px;font-variant-numeric:tabular-nums;line-height:1.25}\n.stat span{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.03em}\n'
+  + '.stat.bad b{color:var(--bad)}.stat.good b{color:var(--ok)}\n'
+  + '.plan{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:16px;overflow-x:auto}\n'
+  + '.plan-svg{width:100%;height:auto;display:block;min-width:600px}\n.plan .cap{text-align:center;font-size:12px;color:var(--mut);margin-top:10px}\n'
+  + 'table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:14px}\n'
+  + 'th,td{padding:9px 8px;text-align:left;border-bottom:1px solid var(--line)}\n'
+  + 'th{background:#eceef0;font-size:11px;text-transform:uppercase;color:var(--mut);letter-spacing:.03em;line-height:1.25}\n'
+  + 'td:not(:first-child),th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}\ntd:first-child{white-space:nowrap}td:last-child{font-weight:700}\n'
+  + 'tr.debt td:last-child{color:var(--bad)}td:nth-child(3){color:var(--bad)}\n.z{color:#b9b9bf}.paid{color:var(--ok);white-space:nowrap}\n'
+  + 'tfoot td{border-top:2px solid var(--line);border-bottom:none;font-weight:700;background:#fafafb}\n'
+  + '.legend{display:flex;gap:16px;justify-content:center;margin:14px 0 0;font-size:12px;color:var(--mut);flex-wrap:wrap}\n.legend span{display:inline-flex;align-items:center;gap:5px}\n'
+  + '.dot{width:8px;height:8px;border-radius:50%;display:inline-block}.dot.bad{background:var(--bad)}.dot.ok{background:var(--ok)}\n'
+  + '.note{color:var(--mut);font-size:12.5px;line-height:1.5;margin:16px 2px 0}\nfooter{text-align:center;color:var(--mut);font-size:12px;margin-top:22px}\n'
+  + '@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}th,td{padding:8px 6px;font-size:13px}h1{font-size:19px}}\n</style></head><body>\n'
+  + '<header>\n <h1>SB Žiburėlis</h1>\n <div class="sub">Nario mokestis ir įsiskolinimai · '+d+'</div>\n</header>\n<div class="wrap">\n <div class="stats">\n'
+  + '  <div class="stat"><b>'+eur(t.charged)+' €</b><span>Priskaičiuota</span></div>\n  <div class="stat good"><b>'+eur(t.paid)+' €</b><span>Sumokėta</span></div>\n'
+  + '  <div class="stat bad"><b>'+eur(t.left)+' €</b><span>Liko mokėti</span></div>\n  <div class="stat"><b>'+t.clean+' / '+t.n+'</b><span>Sklypų be skolos</span></div>\n </div>\n'
+  + ' <div class="plan">\n  '+svg+'\n  <div class="cap">Schematinis sklypų planas — Rudausių sodų 6-oji ir 7-oji g. Skaičius langelyje — likusi mokėti suma.</div>\n </div>\n'
+  + ' <table>\n  <thead><tr><th>Sklypas</th><th>Mokestis</th><th>Sena skola</th><th>Sumokėta</th><th>Liko mokėti</th></tr></thead>\n  <tbody>\n'+trs+'\n  </tbody>\n'
+  + '  <tfoot><tr><td>Viso</td><td>'+eur(r.reduce((s,x)=>s+(+x.mokestis||0),0))+'</td><td>'+eur(r.reduce((s,x)=>s+(+x.apSkola||0),0))+'</td><td>'+eur(t.paid)+'</td><td>'+eur(t.left)+' €</td></tr></tfoot>\n </table>\n'
+  + ' <div class="legend"><span><i class="dot bad"></i>Yra įsiskolinimas</span><span><i class="dot ok"></i>Įsiskolinimo nėra</span></div>\n'
+  + ' <p class="note"><b>Kaip skaičiuojama:</b> „Liko mokėti“ = mokestis už '+esc(settings.year)+' m. + skola už praeitą laikotarpį − sumokėta.\n'
+  + ' Sklypas 7-oji Nr. 5 nuo 2026 m. apskaitomas kaip du atskiri sklypai — Nr. 5 ir Nr. 5-1, mokestį dalijant per pusę.\n'
+  + ' Žalias ✓ reiškia, kad sklypas atsiskaitęs; permoka perkeliama į kitus metus.\n Pastebėjote netikslumą — praneškite valdybai.</p>\n'
+  + '</div>\n<footer>SB Žiburėlis · atnaujinta '+d+'</footer>\n</body></html>\n';
+}
+/* страховка: ни одно имя, телефон или e-mail садовода не должны попасть в публичный файл */
+function findLeaks(html){
+  const H = norm(html), hits = new Set();
+  for(const p of plots){
+    for(const ph of [p.phone,p.phone2]){ const dg=String(ph||"").replace(/\D/g,""); if(dg.length>=8 && html.includes(dg.slice(-8))) hits.add(p.id+": телефон"); }
+    if(p.email && H.includes(norm(p.email))) hits.add(p.id+": e-mail");
+    for(const tkn of (norm(p.name)+" "+norm(p.name2)).split(/[^A-Z]+/).filter(t=>t.length>=5)){
+      if(new RegExp("(^|[^A-Z])"+tkn+"([^A-Z]|$)").test(H)) hits.add(p.id+": имя «"+tkn+"»");
+    }
+  }
+  return Array.from(hits);
+}
+function viewPuslapis(v){
+  const html = publicHtml(); const leaks = findLeaks(html);
+  const url = "https://"+dev.owner.toLowerCase()+".github.io/"+dev.pubRepo+"/";
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Публичная страница долгов</h2><span class="sp"></span><div class="toolbar">'
+   + '<button class="btn pri" id="pub"'+(leaks.length?' disabled':'')+'>Опубликовать на сайте</button><button class="btn" id="dl">Скачать index.html</button></div></div>'
+   + '<div class="panel-bd">'
+   + (leaks.length?'<div class="err" style="margin-bottom:12px">Публикация заблокирована: в странице нашлись персональные данные — '+esc(leaks.join(", "))+'.</div>':'')
+   + '<div class="note info">Кнопка записывает <span class="mono">'+esc(dev.pubPath)+'</span> в публичный репозиторий <span class="mono">'+esc(dev.pubRepo)+'</span>. На сайте <span class="mono">'+esc(url)+'</span> обновится через 1–2 минуты; короткая ссылка из SMS не меняется. На странице только номера участков и суммы — перед отправкой приложение проверяет, что в ней нет имён, телефонов и e-mail.</div>'
+   + '<div class="prev" style="margin-top:12px"><iframe id="pv" title="Предпросмотр публичной страницы" sandbox></iframe></div></div></div>'
+   + '<div class="panel"><div class="panel-hd"><h2>Выгрузки</h2></div><div class="panel-bd"><div class="toolbar">'
+   + '<button class="btn" id="dlAll">Все данные (JSON)</button><button class="btn" id="dlMok">Mokestis '+settings.year+' (CSV)</button><button class="btn" id="dlPay">Mokėjimai '+settings.year+' (CSV)</button></div>'
+   + '<p class="hint" style="margin:10px 0 0">Выгрузки не зашифрованы — это резервная копия для вашего компьютера и отчётность бендрии. CSV открываются в Excel с литовскими буквами.</p></div></div>';
+  el("pv").srcdoc = html;
+  el("pub").onclick = publishPublic;
+  el("dl").onclick = ()=>download("index.html", publicHtml(), "text/html");
+  el("dlAll").onclick = ()=>download("SB-Ziburelis-"+settings.year+"-duomenys.json", JSON.stringify({format:"ziburelis-kasa-export",exported:today(),settings:settings,plots:plots,payments:payments},null,1), "application/json");
+  el("dlMok").onclick = ()=>downloadCsv("Mokestis-"+settings.year+".csv", ["Gatve","Nr","Vardas","Mokėti","AP skola","Sumokėta","Skola"], rows().map(x=>[x.street,x.nr,x.name,x.mokestis,x.apSkola,x.paid,x.due]));
+  el("dlPay").onclick = ()=>downloadCsv("Mokejimai-"+settings.year+".csv", ["Data","Operacija","Sklypai","Suma"], payments.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(p=>[p.date,p.descr,Object.keys(p.alloc||{}).map(k=>k+":"+p.alloc[k]).join(" "),p.amount]));
+}
+async function publishPublic(){
+  const html = publicHtml(); const leaks = findLeaks(html);
+  if(leaks.length) return toast("Публикация заблокирована: найдены персональные данные");
+  if(!confirm("Опубликовать страницу долгов? Её видит любой, у кого есть ссылка: номера участков и суммы, без имён.")) return;
+  busy("pub", true, "Публикую…");
+  try{
+    const cur = await getFile(dev.pubRepo, dev.pubPath);
+    if(cur && cur.text === html){ toast("На сайте уже эта версия"); return; }
+    await putFile(dev.pubRepo, dev.pubPath, html, cur?cur.sha:null, "Skolų lentelė atnaujinta "+today());
+    toast("Опубликовано. Сайт обновится через 1–2 минуты");
+  }catch(e){ toast(e.code==="notfound" ? "Публичный репозиторий не найден или у токена нет к нему доступа" : e.message); }
+  finally{ busy("pub", false, "Опубликовать на сайте"); }
+}
+
+/* ---------------- 6. Настройки ---------------- */
+function viewNustatymai(v){
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Реквизиты и год</h2></div><div class="panel-bd">'
+   + '<div class="grid2">'+f("Год учёта","s_y","number",settings.year)+f("Ссылка для SMS","s_u","text",settings.publicUrl)+f("Получатель перевода","s_p","text",settings.payee)+f("IBAN","s_i","text",settings.iban)+'</div>'
+   + '<div style="margin-top:10px">'+f("Наличными по адресу","s_c","text",settings.cash)+'</div>'
+   + '<p class="hint" style="margin:10px 0 0">Реквизиты подставляются только в SMS. На публичную страницу они не попадают.</p>'
+   + '<div class="toolbar" style="margin-top:12px"><button class="btn pri" id="sv">Сохранить</button></div></div></div>'
+   + '<div class="panel"><div class="panel-hd"><h2>Безопасность</h2></div><div class="panel-bd">'
+   + '<dl class="kv"><dt>Данные</dt><dd>'+esc(dev.owner+"/"+dev.dataRepo+"/"+dev.dataPath)+'</dd><dt>Страница</dt><dd>'+esc(dev.owner+"/"+dev.pubRepo+"/"+dev.pubPath)+'</dd>'
+   + '<dt>Шифрование</dt><dd>AES-256-GCM · PBKDF2-SHA256 × '+dataIter.toLocaleString("ru-RU")+'</dd><dt>Автоблокировка</dt><dd>через 15 минут простоя</dd></dl>'
+   + '<div class="toolbar" style="margin-top:14px"><button class="btn" id="chpw">Сменить пароль</button><button class="btn" id="lk">Заблокировать</button>'
+   + '<a class="btn ghost" href="https://github.com/'+esc(encodeURIComponent(dev.owner))+'/'+esc(encodeURIComponent(dev.dataRepo))+'/commits" target="_blank" rel="noopener noreferrer">История изменений на GitHub</a>'
+   + '<button class="btn dan" id="fg">Забыть это устройство</button></div>'
+   + '<p class="hint" style="margin:10px 0 0">Каждое сохранение — отдельный коммит в приватном репозитории. Откатиться можно, восстановив нужную версию файла на GitHub.</p></div></div>'
+   + '<div class="panel"><div class="panel-hd"><h2>Закрытие года</h2></div><div class="panel-bd">'
+   + '<p class="hint" style="margin:0 0 10px">Переносит остаток каждого участка (<span class="mono">Liko</span>, включая переплаты со знаком минус) в <span class="mono">Sena skola</span> следующего года, очищает журнал платежей и поднимает год. Журнал прошлого года остаётся в истории на GitHub; перед закрытием всё же скачайте выгрузки.</p>'
+   + '<button class="btn" id="roll">Закрыть '+settings.year+' и открыть '+(Number(settings.year)+1)+'</button></div></div>';
+  el("sv").onclick = ()=>{
+    settings.year=Number(el("s_y").value)||settings.year; settings.publicUrl=el("s_u").value.trim(); settings.payee=el("s_p").value.trim();
+    settings.iban=el("s_i").value.trim(); settings.cash=el("s_c").value.trim(); touch(); renderAll(); toast("Сохранено");
+  };
+  el("chpw").onclick = changePassword;
+  el("lk").onclick = ()=>lockNow();
+  el("fg").onclick = ()=>{ if(confirm("Удалить сохранённый токен с этого устройства и выйти?")){ lockNow().then(()=>{ forgetDev(); dev=null; screen="setup"; render(); }); } };
+  el("roll").onclick = ()=>{
+    if(!confirm("Закрыть "+settings.year+"? Остатки перейдут в «Sena skola», журнал платежей очистится.")) return;
+    const r = rows(); for(const x of r){ const p = plots.find(y=>y.id===x.id); p.apSkola = x.due; }
+    payments = []; settings.year = Number(settings.year)+1; touch(); renderAll(); toast("Год закрыт");
+  };
+}
+function changePassword(){
+  modal("Сменить пароль",
+    f("Текущий пароль","cp_old","password","")+'<div style="margin-top:10px">'+f("Новый пароль (от 12 символов)","cp_new","password","")+'</div><div style="margin-top:10px">'+f("Новый пароль ещё раз","cp_new2","password","")+'</div>'
+    + '<p class="hint" style="margin:10px 0 0">На остальных устройствах после смены понадобится «Подключить заново» — токен и новый пароль.</p>',
+    async ()=>{
+      const o=el("cp_old").value, n=el("cp_new").value, n2=el("cp_new2").value;
+      if(n.length<12){ toast("Новый пароль короче 12 символов"); return false; }
+      if(n!==n2){ toast("Новые пароли не совпадают"); return false; }
+      try{ const tk = await deriveKey(o, b64d(dev.tok.kdf.salt), dev.tok.kdf.iter||ITER); await unseal(tk, dev.tok); }
+      catch(_){ toast("Текущий пароль неверный"); return false; }
+      if(dirty || saving) await flush();
+      if(conflict || dirty){ toast("Сначала разберитесь с несохранёнными изменениями"); return false; }
+      try{
+        const salt = crypto.getRandomValues(new Uint8Array(16)); const key = await deriveKey(n, salt, ITER);
+        const env = await seal(key, salt, ITER, snapshot());
+        const sha = await putFile(dev.dataRepo, dev.dataPath, JSON.stringify(env), dataSha, "kasa: pakeistas slaptažodis "+stamp());
+        dataKey=key; dataSalt=salt; dataIter=ITER; dataSha=sha; lastSaved=new Date();
+        const tSalt = crypto.getRandomValues(new Uint8Array(16)); const tKey = await deriveKey(n, tSalt, ITER);
+        dev.tok = await seal(tKey, tSalt, ITER, {token:token}); saveDev(dev);
+        renderAll(); toast("Пароль изменён");
+      }catch(e){ toast(e.code==="conflict"?"Данные изменились на другом устройстве — обновите и повторите":e.message); return false; }
+    });
+}
+
+/* ---------------- общие мелочи ---------------- */
+function modal(title, body, onSave){
+  const s = document.createElement("div"); s.className="scrim";
+  s.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><div class="panel-hd"><h2>'+esc(title)+'</h2></div><div class="panel-bd">'+body+'</div>'
+    + '<div class="panel-bd" style="border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" data-x>Отмена</button><button class="btn pri" data-ok>Сохранить</button></div></div>';
+  document.body.appendChild(s);
+  const close=()=>{ s.remove(); document.removeEventListener("keydown",onKey); };
+  const onKey=e=>{ if(e.key==="Escape") close(); };
+  document.addEventListener("keydown",onKey);
+  s.querySelector("[data-x]").onclick=close;
+  s.addEventListener("click", e=>{ if(e.target===s) close(); });
+  const ok = s.querySelector("[data-ok]");
+  ok.onclick = async()=>{ ok.disabled=true; try{ const r = await onSave(); if(r!==false) close(); } finally{ ok.disabled=false; } };
+  const first = s.querySelector("input,textarea"); if(first) first.focus();
+}
+let toastT;
+function toast(msg){
+  let t = document.querySelector(".toast");
+  if(!t){ t=document.createElement("div"); t.className="toast"; t.setAttribute("role","status"); document.body.appendChild(t); }
+  t.textContent = msg; clearTimeout(toastT); toastT=setTimeout(()=>t.remove(),3200);
+}
+async function copy(text){
+  try{ await navigator.clipboard.writeText(text); toast("Скопировано"); }
+  catch(e){
+    const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); toast("Скопировано"); }catch(_){ toast("Не удалось скопировать"); } ta.remove();
+  }
+}
+function download(name, data, type){
+  const b = new Blob([data], {type:type||"application/octet-stream"}); const u = URL.createObjectURL(b);
+  const a = document.createElement("a"); a.href=u; a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(u); a.remove(); }, 1500);
+}
+function downloadCsv(name, header, rowsArr){
+  const cell = s => '"'+String(s==null?"":s).replace(/"/g,'""')+'"';
+  download(name, "﻿"+[header].concat(rowsArr).map(r=>r.map(cell).join(",")).join("\r\n"), "text/csv;charset=utf-8");
+}
+
+/* ---------------- старт ---------------- */
+(function boot(){
+  if(!window.crypto || !crypto.subtle){ el("root").innerHTML='<div class="gate"><div class="gate-card"><div class="bd"><div class="err">Браузер не поддерживает шифрование (нужен HTTPS и современный браузер).</div></div></div></div>'; return; }
+  dev = loadDev();
+  screen = dev ? "unlock" : "setup";
+  render();
+})();
+</script>
+</body>
+</html>
