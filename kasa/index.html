@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="lt">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -112,6 +112,10 @@ th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);verti
 thead th{position:sticky;top:0;background:var(--surface-2);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;z-index:1;white-space:nowrap}
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:var(--surface-2)}
+th.sortable{cursor:pointer;user-select:none;-webkit-user-select:none}
+th.sortable:hover{color:var(--ink)}
+th.sortable .arr{display:inline-block;min-width:1em;margin-left:3px;font-size:9px;color:var(--accent-ink)}
+th.sortable[aria-sort="none"] .arr::after{content:"↕";color:var(--muted);opacity:.45}
 tr.rowlink{cursor:pointer}
 td.r,th.r{text-align:right;font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace}
 td.plot{white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-weight:500}
@@ -168,10 +172,10 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;font-family:"IBM Plex Mono",monos
 <script>
 "use strict";
 /* ============================================================================
-   Žiburėlis kasa — учёт взносов SB Žiburėlis.
-   В этом файле НЕТ данных садоводов. Данные хранятся в приватном репозитории
-   GitHub в виде зашифрованного файла (AES-256-GCM, ключ из пароля через
-   PBKDF2-SHA256, 600 000 итераций) и расшифровываются только в браузере.
+   Žiburėlis kasa — SB Žiburėlis nario mokesčių apskaita.
+   Šiame faile NĖRA sodininkų duomenų. Duomenys saugomi privačioje GitHub
+   repozitorijoje kaip užšifruotas failas (AES-256-GCM, raktas iš slaptažodžio per
+   PBKDF2-SHA256, 600 000 iteracijų) ir iššifruojami tik naršyklėje.
    ========================================================================== */
 
 const DEFAULTS = { owner:"aleksandrassukovas-hub", dataRepo:"ziburelis-duomenys", dataPath:"data.enc.json",
@@ -180,7 +184,7 @@ const ITER = 600000;
 const IDLE_MS = 15*60*1000;
 const DEV_KEY = "zk.device.v1";
 
-/* Схема участков на плане (координаты в SVG публичной страницы). Не персональные данные. */
+/* Sklypų išdėstymas plane (koordinatės viešo puslapio SVG). Ne asmens duomenys. */
 const GEO = {
  "6-27":[0,0],"6-25":[50,0],"6-23":[100,0],"6-21":[150,0],"6-19":[200,0],"6-17":[250,0],"6-15":[300,0],
  "6-13":[374,0],"6-11":[424,0],"6-9":[474,0],"6-7":[524,0],"6-5":[574,0],"6-3":[624,0],
@@ -191,17 +195,21 @@ const GEO = {
 };
 const DEFAULT_SMS = "Sveiki, primenu apie SB Žiburėlis nario mokestį už {metai} m.\nSklypas Rudausių sodų {sklypas} — liko mokėti {skola} Eur (kartu su skola už ankstesnį laikotarpį).\nPatikslinti galite čia: {nuoroda}\nSumokėti galite pavedimu: {gavejas}, {iban}, arba grynais adresu {grynais}. Mokėjimo paskirtyje įrašykite savo sklypo adresą.\nDėkoju!";
 
-/* ---------------- состояние ---------------- */
+/* ---------------- būsena ---------------- */
 let screen = "setup";           // setup | unlock | app
-let dev = null;                 // конфиг устройства: репо + зашифрованный токен
-let token = null;               // токен GitHub — только в памяти, только пока разблокировано
+let dev = null;                 // įrenginio nustatymai: repozitorijos + užšifruotas raktas
+let token = null;               // GitHub raktas — tik atmintyje ir tik kol atrakinta
 let dataKey = null, dataSalt = null, dataIter = ITER, dataSha = null;
 let plots = [], payments = [], settings = {};
 let tab = "skolos", filter = "all", q = "", staged = null;
+/* rūšiavimas pagal stulpelius: k — raktas, d — kryptis (1 didėjanti, -1 mažėjanti) */
+const SORT_DEFAULT = { skolos:{k:null,d:1}, kontaktai:{k:null,d:1}, journal:{k:"date",d:-1} };
+let sorts = JSON.parse(JSON.stringify(SORT_DEFAULT));
+const NUM_KEYS = new Set(["mokestis","apSkola","paid","due","amount","date"]);
 let dirty = false, saving = null, saveTimer = null, conflict = false, saveErr = "", lastSaved = null;
 let lastActive = Date.now();
 
-/* ---------------- утилиты ---------------- */
+/* ---------------- pagalbinės funkcijos ---------------- */
 const te = new TextEncoder(), td = new TextDecoder();
 const el = id => document.getElementById(id);
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -211,7 +219,7 @@ const today = () => { const d=new Date(); return d.getFullYear()+"-"+p2(d.getMon
 const stamp = () => { const d=new Date(); return today()+" "+p2(d.getHours())+":"+p2(d.getMinutes()); };
 const newId = () => "p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 
-/* ---------------- шифрование ---------------- */
+/* ---------------- šifravimas ---------------- */
 function b64e(bytes){ const b=new Uint8Array(bytes); let s=""; for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000)); return btoa(s); }
 function b64d(str){ const s=atob(String(str||"").replace(/\s/g,"")); const b=new Uint8Array(s.length); for(let i=0;i<s.length;i++) b[i]=s.charCodeAt(i); return b; }
 async function deriveKey(pass, salt, iter){
@@ -239,21 +247,21 @@ async function gh(method, url, body, tok){
       headers: Object.assign({Authorization:"Bearer "+(tok||token), Accept:"application/vnd.github+json"}, body?{"Content-Type":"application/json"}:{}),
       body: body?JSON.stringify(body):undefined
     });
-  }catch(e){ throw new GhError("network","Нет связи с GitHub. Проверьте интернет и повторите."); }
+  }catch(e){ throw new GhError("network","Nėra ryšio su GitHub. Patikrinkite internetą ir bandykite dar kartą."); }
   return res;
 }
 const repoUrl = (repo) => "/repos/"+encodeURIComponent(dev.owner)+"/"+encodeURIComponent(repo);
 const fileUrl = (repo,path) => repoUrl(repo)+"/contents/"+String(path).split("/").map(encodeURIComponent).join("/");
 async function ghFail(res){
-  if(res.status===401) return new GhError("auth","GitHub не принял токен: он истёк, отозван или введён с ошибкой.",401);
+  if(res.status===401) return new GhError("auth","GitHub nepriėmė prieigos rakto: jis nebegalioja, atšauktas arba įvestas su klaida.",401);
   if(res.status===403){
     let m=""; try{ m=(await res.json()).message||""; }catch(_){}
-    if(/rate limit/i.test(m)) return new GhError("rate","GitHub временно ограничил запросы. Подождите несколько минут.",403);
-    return new GhError("perm","У токена нет прав на это действие (нужно Contents: Read and write).",403);
+    if(/rate limit/i.test(m)) return new GhError("rate","GitHub laikinai apribojo užklausas. Palaukite kelias minutes.",403);
+    return new GhError("perm","Raktas neturi teisių šiam veiksmui (reikia Contents: Read and write).",403);
   }
-  if(res.status===404) return new GhError("notfound","Не найдено: проверьте логин, имя репозитория и доступ токена к нему.",404);
-  if(res.status===409 || res.status===422) return new GhError("conflict","Файл на GitHub изменился с момента загрузки.",res.status);
-  return new GhError("http","GitHub ответил ошибкой "+res.status+".",res.status);
+  if(res.status===404) return new GhError("notfound","Nerasta: patikrinkite vartotojo vardą, repozitorijos pavadinimą ir rakto prieigą prie jos.",404);
+  if(res.status===409 || res.status===422) return new GhError("conflict","Failas GitHub pasikeitė nuo įkėlimo.",res.status);
+  return new GhError("http","GitHub grąžino klaidą "+res.status+".",res.status);
 }
 async function repoExists(repo, tok){
   const r = await gh("GET", repoUrl(repo), null, tok);
@@ -277,22 +285,22 @@ async function putFile(repo, path, text, sha, message, tok){
   return j.content.sha;
 }
 
-/* ---------------- конфиг устройства ---------------- */
+/* ---------------- įrenginio nustatymai ---------------- */
 function loadDev(){ try{ const j = JSON.parse(localStorage.getItem(DEV_KEY)||"null"); return (j && j.tok) ? j : null; }catch(_){ return null; } }
 function saveDev(d){ try{ localStorage.setItem(DEV_KEY, JSON.stringify(d)); return true; }catch(_){ return false; } }
 function forgetDev(){ try{ localStorage.removeItem(DEV_KEY); }catch(_){} }
 
-/* ---------------- нормализация данных ---------------- */
+/* ---------------- duomenų tvarkymas ---------------- */
 function normalize(j){
-  if(!j || !Array.isArray(j.plots) || !Array.isArray(j.payments)) throw new Error("Файл не похож на выгрузку Žiburėlis kasa: нет списков участков и платежей.");
+  if(!j || !Array.isArray(j.plots) || !Array.isArray(j.payments)) throw new Error("Failas nepanašus į Žiburėlis kasa eksportą: nėra sklypų ir mokėjimų sąrašų.");
   const P = j.plots.map(p=>{
-    if(!p || !p.id || !p.street || p.nr==null) throw new Error("В файле есть участок без номера или улицы.");
+    if(!p || !p.id || !p.street || p.nr==null) throw new Error("Faile yra sklypas be numerio arba gatvės.");
     return {id:String(p.id), street:String(p.street), nr:String(p.nr), mokestis:Number(p.mokestis)||0, apSkola:Number(p.apSkola)||0,
             name:p.name||"", phone:p.phone||"", name2:p.name2||"", phone2:p.phone2||"", email:p.email||"", note:p.note||""};
   });
   const ids = new Set(P.map(p=>p.id));
   const Y = j.payments.map(p=>{
-    const alloc = {}; for(const k of Object.keys(p.alloc||{})){ if(!ids.has(k)) throw new Error("Платёж «"+(p.descr||"")+"» разнесён на несуществующий участок "+k+"."); alloc[k]=Number(p.alloc[k])||0; }
+    const alloc = {}; for(const k of Object.keys(p.alloc||{})){ if(!ids.has(k)) throw new Error("Mokėjimas „"+(p.descr||"")+"“ priskirtas neegzistuojančiam sklypui "+k+"."); alloc[k]=Number(p.alloc[k])||0; }
     return {id:String(p.id||newId()), date:String(p.date||""), descr:String(p.descr||""), amount:Number(p.amount)||0, alloc:alloc};
   });
   const s = Object.assign({year:new Date().getFullYear(), payee:"", iban:"", cash:"", publicUrl:"", smsTemplate:DEFAULT_SMS}, j.settings||{});
@@ -303,7 +311,7 @@ function snapshot(){ return {format:"ziburelis-kasa-data", v:1, savedAt:new Date
 function wipe(){ token=null; dataKey=null; dataSalt=null; dataSha=null; plots=[]; payments=[]; settings={}; staged=null; dirty=false; conflict=false; saveErr=""; }
 
 /* ============================================================================
-   ЭКРАНЫ ВХОДА
+   PRISIJUNGIMO EKRANAI
    ========================================================================== */
 function render(){
   document.querySelectorAll(".scrim").forEach(s=>s.remove());
@@ -318,24 +326,24 @@ function renderSetup(mode){
   const create = mode==="create";
   el("root").innerHTML = '<div class="gate"><div class="gate-card">'
    + '<div class="hd"><div class="lock-ico">'+lockSvg+'</div><h1>Žiburėlis kasa</h1>'
-   + '<p>'+(create?'Первый запуск: создаём зашифрованное хранилище в приватном репозитории.':'Подключаем это устройство к хранилищу. Нужно один раз на каждом телефоне и компьютере.')+'</p></div>'
-   + '<div class="gate-tabs"><button class="btn sm'+(!create?' pri':'')+'" id="tConnect">Подключить устройство</button>'
-   + '<button class="btn sm'+(create?' pri':'')+'" id="tCreate">Создать хранилище</button></div>'
+   + '<p>'+(create?'Pirmas paleidimas: kuriame užšifruotą saugyklą privačioje repozitorijoje.':'Prijungiame šį įrenginį prie saugyklos. Tai reikia padaryti vieną kartą kiekviename telefone ir kompiuteryje.')+'</p></div>'
+   + '<div class="gate-tabs"><button class="btn sm'+(!create?' pri':'')+'" id="tConnect">Prijungti įrenginį</button>'
+   + '<button class="btn sm'+(create?' pri':'')+'" id="tCreate">Sukurti saugyklą</button></div>'
    + '<form class="bd" id="setupForm" autocomplete="off">'
    + '<div id="setupErr" class="err" hidden></div>'
-   + fld("Токен GitHub","s_tok","password","", "github_pat_…")
-   + fld(create?"Новый пароль (от 12 символов)":"Пароль хранилища","s_pw","password","")
-   + (create? fld("Пароль ещё раз","s_pw2","password","") : "")
-   + (create? '<div class="field"><label for="s_file">Файл с данными (.json)</label><input id="s_file" type="file" accept=".json,application/json"></div>'
-             + '<p class="hint" style="margin:0">Выгрузка <span class="mono">SB-Ziburelis-2026-duomenys.json</span> из папки проекта. Она будет зашифрована здесь, в браузере, и только потом отправлена на GitHub.</p>' : "")
-   + '<details><summary>Репозитории</summary><div style="display:grid;gap:10px">'
-   + fld("Логин GitHub","s_owner","text",d.owner)
-   + '<div class="grid2">'+fld("Приватный репо (данные)","s_drepo","text",d.dataRepo)+fld("Файл данных","s_dpath","text",d.dataPath)+'</div>'
-   + '<div class="grid2">'+fld("Публичный репо (страница)","s_prepo","text",d.pubRepo)+fld("Файл страницы","s_ppath","text",d.pubPath)+'</div>'
+   + fld("GitHub prieigos raktas (token)","s_tok","password","", "github_pat_…")
+   + fld(create?"Naujas slaptažodis (ne trumpesnis nei 12 simbolių)":"Saugyklos slaptažodis","s_pw","password","")
+   + (create? fld("Pakartokite slaptažodį","s_pw2","password","") : "")
+   + (create? '<div class="field"><label for="s_file">Duomenų failas (.json)</label><input id="s_file" type="file" accept=".json,application/json"></div>'
+             + '<p class="hint" style="margin:0">Eksporto failas <span class="mono">SB-Ziburelis-2026-duomenys.json</span> iš projekto aplanko. Jis bus užšifruotas čia, naršyklėje, ir tik tada išsiųstas į GitHub.</p>' : "")
+   + '<details><summary>Repozitorijos</summary><div style="display:grid;gap:10px">'
+   + fld("GitHub vartotojo vardas","s_owner","text",d.owner)
+   + '<div class="grid2">'+fld("Privati repozitorija (duomenys)","s_drepo","text",d.dataRepo)+fld("Duomenų failas","s_dpath","text",d.dataPath)+'</div>'
+   + '<div class="grid2">'+fld("Vieša repozitorija (puslapis)","s_prepo","text",d.pubRepo)+fld("Puslapio failas","s_ppath","text",d.pubPath)+'</div>'
    + '</div></details>'
-   + '<button class="btn pri wide" id="setupGo" type="submit">'+(create?'Зашифровать и создать':'Подключить')+'</button>'
+   + '<button class="btn pri wide" id="setupGo" type="submit">'+(create?'Užšifruoti ir sukurti':'Prijungti')+'</button>'
    + '</form>'
-   + '<div class="ft">'+(create?'Пароль нигде не хранится. Забудете его — данные не восстановить, останется только JSON-выгрузка.':'Токен сохранится на этом устройстве в зашифрованном виде. Каждый вход — только пароль.')+'</div>'
+   + '<div class="ft">'+(create?'Slaptažodis niekur nesaugomas. Pamiršus jį duomenų atkurti nebus galima — liks tik JSON eksportas.':'Raktas bus išsaugotas šiame įrenginyje užšifruotas. Kiekvieną kartą jungiantis — tik slaptažodis.')+'</div>'
    + '</div></div>';
   el("tConnect").onclick = e=>{ e.preventDefault(); renderSetup("connect"); };
   el("tCreate").onclick = e=>{ e.preventDefault(); renderSetup("create"); };
@@ -354,30 +362,30 @@ async function doConnect(){
   setupErr("");
   const tok = el("s_tok").value.trim(), pw = el("s_pw").value;
   const cfg = readRepoFields();
-  if(!tok || !pw) return setupErr("Нужны токен и пароль.");
-  if(!cfg.owner || !cfg.dataRepo) return setupErr("Нужны логин и имя приватного репозитория.");
-  busy("setupGo", true, "Проверяю…");
+  if(!tok || !pw) return setupErr("Reikia rakto ir slaptažodžio.");
+  if(!cfg.owner || !cfg.dataRepo) return setupErr("Reikia vartotojo vardo ir privačios repozitorijos pavadinimo.");
+  busy("setupGo", true, "Tikrinama…");
   try{
     dev = Object.assign({}, cfg);
     const f = await getFile(cfg.dataRepo, cfg.dataPath, tok);
-    if(!f) throw new Error("Файл данных не найден. Проверьте имя репозитория и что у токена есть к нему доступ. Если хранилища ещё нет — вкладка «Создать хранилище».");
+    if(!f) throw new Error("Duomenų failas nerastas. Patikrinkite repozitorijos pavadinimą ir ar raktas turi prie jos prieigą. Jei saugyklos dar nėra — skirtukas „Sukurti saugyklą“.");
     let env; try{ env = JSON.parse(f.text); }catch(_){ env=null; }
-    if(!envOk(env)) throw new Error("Файл в репозитории — не зашифрованное хранилище Žiburėlis kasa.");
-    busy("setupGo", true, "Проверяю пароль…");
+    if(!envOk(env)) throw new Error("Repozitorijoje esantis failas nėra užšifruota Žiburėlis kasa saugykla.");
+    busy("setupGo", true, "Tikrinamas slaptažodis…");
     const salt = b64d(env.kdf.salt), iter = env.kdf.iter||ITER;
     const key = await deriveKey(pw, salt, iter);
-    let data; try{ data = await unseal(key, env); }catch(_){ throw new Error("Неверный пароль."); }
+    let data; try{ data = await unseal(key, env); }catch(_){ throw new Error("Neteisingas slaptažodis."); }
     const n = normalize(data);
     const tSalt = crypto.getRandomValues(new Uint8Array(16));
     const tKey = await deriveKey(pw, tSalt, ITER);
     dev.tok = await seal(tKey, tSalt, ITER, {token:tok});
-    if(!saveDev(dev)) throw new Error("Браузер не дал сохранить настройки (приватный режим?). Вход будет работать только до закрытия вкладки.");
+    if(!saveDev(dev)) throw new Error("Naršyklė neleido išsaugoti nustatymų (privatus režimas?). Prisijungimas veiks tik iki kortelės uždarymo.");
     token = tok; dataKey = key; dataSalt = salt; dataIter = iter; dataSha = f.sha;
     settings = n.settings; plots = n.plots; payments = n.payments;
-    lastSaved = null; screen = "app"; tab = "skolos"; render(); toast("Устройство подключено");
+    lastSaved = null; screen = "app"; tab = "skolos"; render(); toast("Įrenginys prijungtas");
   }catch(e){
     dev = loadDev();
-    setupErr(e.message||String(e)); busy("setupGo", false, "Подключить");
+    setupErr(e.message||String(e)); busy("setupGo", false, "Prijungti");
   }
 }
 
@@ -386,26 +394,26 @@ async function doCreate(){
   const tok = el("s_tok").value.trim(), pw = el("s_pw").value, pw2 = el("s_pw2").value;
   const file = el("s_file").files && el("s_file").files[0];
   const cfg = readRepoFields();
-  if(!tok) return setupErr("Нужен токен GitHub.");
-  if(pw.length < 12) return setupErr("Пароль короче 12 символов. Надёжнее всего — 4–5 случайных слов подряд.");
-  if(pw !== pw2) return setupErr("Пароли не совпадают.");
-  if(!file) return setupErr("Выберите JSON-файл с данными.");
-  if(!cfg.owner || !cfg.dataRepo) return setupErr("Нужны логин и имя приватного репозитория.");
-  busy("setupGo", true, "Проверяю репозиторий…");
+  if(!tok) return setupErr("Reikia GitHub prieigos rakto.");
+  if(pw.length < 12) return setupErr("Slaptažodis trumpesnis nei 12 simbolių. Patikimiausia — 4–5 atsitiktiniai žodžiai iš eilės.");
+  if(pw !== pw2) return setupErr("Slaptažodžiai nesutampa.");
+  if(!file) return setupErr("Pasirinkite JSON duomenų failą.");
+  if(!cfg.owner || !cfg.dataRepo) return setupErr("Reikia vartotojo vardo ir privačios repozitorijos pavadinimo.");
+  busy("setupGo", true, "Tikrinama repozitorija…");
   try{
     dev = Object.assign({}, cfg);
-    let n; try{ n = normalize(JSON.parse(await file.text())); }catch(e){ throw new Error(e instanceof SyntaxError ? "Файл не читается как JSON." : e.message); }
+    let n; try{ n = normalize(JSON.parse(await file.text())); }catch(e){ throw new Error(e instanceof SyntaxError ? "Failas neatpažįstamas kaip JSON." : e.message); }
     const repo = await repoExists(cfg.dataRepo, tok);
-    if(!repo.ok) throw new Error("Репозиторий «"+cfg.dataRepo+"» не найден или у токена нет к нему доступа.");
-    if(!repo.private) throw new Error("Репозиторий «"+cfg.dataRepo+"» публичный. Для данных нужен приватный — поменяйте в Settings → Danger Zone → Change visibility.");
+    if(!repo.ok) throw new Error("Repozitorija „"+cfg.dataRepo+"“ nerasta arba raktas neturi prie jos prieigos.");
+    if(!repo.private) throw new Error("Repozitorija „"+cfg.dataRepo+"“ yra vieša. Duomenims reikia privačios — pakeiskite Settings → Danger Zone → Change visibility.");
     const exist = await getFile(cfg.dataRepo, cfg.dataPath, tok);
-    if(exist) throw new Error("В репозитории уже есть хранилище. Используйте «Подключить устройство» — перезаписывать его отсюда нельзя.");
-    busy("setupGo", true, "Шифрую…");
+    if(exist) throw new Error("Repozitorijoje jau yra saugykla. Naudokite „Prijungti įrenginį“ — perrašyti jos iš čia negalima.");
+    busy("setupGo", true, "Šifruojama…");
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const key = await deriveKey(pw, salt, ITER);
     settings = n.settings; plots = n.plots; payments = n.payments;
     const env = await seal(key, salt, ITER, snapshot());
-    busy("setupGo", true, "Отправляю…");
+    busy("setupGo", true, "Siunčiama…");
     const sha = await putFile(cfg.dataRepo, cfg.dataPath, JSON.stringify(env), null, "kasa: sukurta saugykla "+stamp(), tok);
     const tSalt = crypto.getRandomValues(new Uint8Array(16));
     const tKey = await deriveKey(pw, tSalt, ITER);
@@ -413,62 +421,62 @@ async function doCreate(){
     saveDev(dev);
     token = tok; dataKey = key; dataSalt = salt; dataIter = ITER; dataSha = sha;
     lastSaved = new Date(); screen = "app"; tab = "skolos"; render();
-    toast("Хранилище создано. Удалите JSON-файл с компьютера, если он больше не нужен.");
+    toast("Saugykla sukurta. Ištrinkite JSON failą iš kompiuterio, jei jo nebereikia.");
   }catch(e){
     wipe(); dev = loadDev();
-    setupErr(e.message||String(e)); busy("setupGo", false, "Зашифровать и создать");
+    setupErr(e.message||String(e)); busy("setupGo", false, "Užšifruoti ir sukurti");
   }
 }
 
 function renderUnlock(msg){
   el("root").innerHTML = '<div class="gate"><div class="gate-card">'
    + '<div class="hd"><div class="lock-ico">'+lockSvg+'</div><h1>Žiburėlis kasa</h1>'
-   + '<p>Хранилище <span class="mono">'+esc(dev.owner+"/"+dev.dataRepo)+'</span></p></div>'
+   + '<p>Saugykla <span class="mono">'+esc(dev.owner+"/"+dev.dataRepo)+'</span></p></div>'
    + '<form class="bd" id="unlockForm">'
    + '<input type="text" name="username" autocomplete="username" value="'+esc(dev.owner+"/"+dev.dataRepo)+'" style="display:none" readonly>'
    + '<div id="setupErr" class="err"'+(msg?'':' hidden')+'>'+esc(msg||"")+'</div>'
-   + '<div class="field"><label for="u_pw">Пароль</label><input id="u_pw" name="password" type="password" autocomplete="current-password"></div>'
-   + '<button class="btn pri wide" id="unlockGo" type="submit">Открыть</button>'
+   + '<div class="field"><label for="u_pw">Slaptažodis</label><input id="u_pw" name="password" type="password" autocomplete="current-password"></div>'
+   + '<button class="btn pri wide" id="unlockGo" type="submit">Atidaryti</button>'
    + '</form>'
-   + '<div class="ft"><button class="link" id="reconnect">Подключить заново</button><span>·</span><button class="link" id="forget">Забыть это устройство</button></div>'
+   + '<div class="ft"><button class="link" id="reconnect">Prijungti iš naujo</button><span>·</span><button class="link" id="forget">Pamiršti šį įrenginį</button></div>'
    + '</div></div>';
   el("unlockForm").onsubmit = e=>{ e.preventDefault(); doUnlock(); };
   el("reconnect").onclick = ()=>renderSetup("connect");
-  el("forget").onclick = ()=>{ if(confirm("Удалить с этого устройства сохранённый токен? Для входа понадобится ввести токен заново.")){ forgetDev(); dev=null; screen="setup"; render(); } };
+  el("forget").onclick = ()=>{ if(confirm("Ištrinti šiame įrenginyje išsaugotą raktą? Norint prisijungti reikės vėl įvesti raktą.")){ forgetDev(); dev=null; screen="setup"; render(); } };
   const pw = el("u_pw"); pw.focus();
 }
 async function doUnlock(){
   setupErr("");
   const pw = el("u_pw").value;
-  if(!pw) return setupErr("Введите пароль.");
-  busy("unlockGo", true, "Проверяю пароль…");
+  if(!pw) return setupErr("Įveskite slaptažodį.");
+  busy("unlockGo", true, "Tikrinamas slaptažodis…");
   try{
     const t = dev.tok;
     const tKey = await deriveKey(pw, b64d(t.kdf.salt), t.kdf.iter||ITER);
-    let tokObj; try{ tokObj = await unseal(tKey, t); }catch(_){ throw new Error("Неверный пароль. Если пароль меняли на другом устройстве — «Подключить заново»."); }
-    busy("unlockGo", true, "Загружаю данные…");
+    let tokObj; try{ tokObj = await unseal(tKey, t); }catch(_){ throw new Error("Neteisingas slaptažodis. Jei slaptažodis buvo pakeistas kitame įrenginyje — „Prijungti iš naujo“."); }
+    busy("unlockGo", true, "Įkeliami duomenys…");
     token = tokObj.token;
     await loadRemote(pw);
     screen = "app"; tab = "skolos"; lastActive = Date.now(); render();
   }catch(e){
     wipe();
-    setupErr(e.message||String(e)); busy("unlockGo", false, "Открыть");
+    setupErr(e.message||String(e)); busy("unlockGo", false, "Atidaryti");
     if(el("u_pw")){ el("u_pw").value=""; el("u_pw").focus(); }
   }
 }
-/* загрузка и расшифровка файла данных; pw нужен, только если соль файла сменилась */
+/* duomenų failo įkėlimas ir iššifravimas; pw reikia tik jei pasikeitė failo druska */
 async function loadRemote(pw){
   const f = await getFile(dev.dataRepo, dev.dataPath);
-  if(!f) throw new Error("Файл данных пропал из репозитория «"+dev.dataRepo+"». Восстановите его из истории коммитов на GitHub.");
+  if(!f) throw new Error("Duomenų failas dingo iš repozitorijos „"+dev.dataRepo+"“. Atkurkite jį iš GitHub pakeitimų istorijos.");
   const env = JSON.parse(f.text);
-  if(!envOk(env)) throw new Error("Файл данных повреждён или не зашифрован.");
+  if(!envOk(env)) throw new Error("Duomenų failas sugadintas arba neužšifruotas.");
   const fileSalt = b64d(env.kdf.salt), iter = env.kdf.iter||ITER;
   let key = dataKey;
   if(!key || !sameBytes(fileSalt, dataSalt)){
-    if(!pw) throw new GhError("relock","Пароль сменили на другом устройстве — войдите заново.");
+    if(!pw) throw new GhError("relock","Slaptažodis pakeistas kitame įrenginyje — prisijunkite iš naujo.");
     key = await deriveKey(pw, fileSalt, iter);
   }
-  let data; try{ data = await unseal(key, env); }catch(_){ throw new Error("Пароль не подходит к файлу данных. Если пароль меняли на другом устройстве — «Подключить заново»."); }
+  let data; try{ data = await unseal(key, env); }catch(_){ throw new Error("Slaptažodis netinka duomenų failui. Jei slaptažodis buvo pakeistas kitame įrenginyje — „Prijungti iš naujo“."); }
   const n = normalize(data);
   dataKey = key; dataSalt = fileSalt; dataIter = iter; dataSha = f.sha;
   settings = n.settings; plots = n.plots; payments = n.payments;
@@ -477,7 +485,7 @@ async function loadRemote(pw){
 function sameBytes(a,b){ if(!a||!b||a.length!==b.length) return false; for(let i=0;i<a.length;i++) if(a[i]!==b[i]) return false; return true; }
 
 /* ============================================================================
-   СОХРАНЕНИЕ
+   IŠSAUGOJIMAS
    ========================================================================== */
 function touch(){ dirty = true; saveErr = ""; clearTimeout(saveTimer); saveTimer = setTimeout(flush, 1200); renderSync(); }
 async function flush(){
@@ -492,7 +500,7 @@ async function flush(){
       lastSaved = new Date(); saveErr = "";
     }catch(e){
       dirty = true;
-      if(e.code==="conflict") conflict = true; else saveErr = e.message||"Ошибка сохранения";
+      if(e.code==="conflict") conflict = true; else saveErr = e.message||"Išsaugojimo klaida";
     }
   })();
   await saving; saving = null;
@@ -501,59 +509,59 @@ async function flush(){
 }
 function renderSync(state){
   const d = el("syncDot"), t = el("syncTxt"); if(!d||!t) return;
-  let k="ok", txt = lastSaved ? "сохранено "+p2(lastSaved.getHours())+":"+p2(lastSaved.getMinutes()) : "загружено";
-  if(state==="saving"){ k="busy"; txt="сохраняю…"; }
-  else if(conflict){ k="bad"; txt="конфликт"; }
-  else if(saveErr){ k="bad"; txt="не сохранено"; }
-  else if(dirty){ k="busy"; txt="есть изменения"; }
+  let k="ok", txt = lastSaved ? "išsaugota "+p2(lastSaved.getHours())+":"+p2(lastSaved.getMinutes()) : "įkelta";
+  if(state==="saving"){ k="busy"; txt="saugoma…"; }
+  else if(conflict){ k="bad"; txt="konfliktas"; }
+  else if(saveErr){ k="bad"; txt="neišsaugota"; }
+  else if(dirty){ k="busy"; txt="yra pakeitimų"; }
   d.className = "dot "+k; t.textContent = txt;
 }
 function renderBanner(){
   const b = el("banner"); if(!b) return;
   if(conflict){
     b.className="banner crit"; b.hidden=false;
-    b.innerHTML = '<span>Данные изменились на другом устройстве, поэтому последние правки здесь не сохранены.</span>'
-      + '<button class="btn sm" id="bReload">Загрузить свежие данные (правки отсюда пропадут)</button>';
-    el("bReload").onclick = async()=>{ try{ await loadRemote(); lastSaved=null; renderAll(); toast("Загружены свежие данные"); }catch(e){ if(e.code==="relock") return lockNow(e.message); toast(e.message); } };
+    b.innerHTML = '<span>Duomenys pasikeitė kitame įrenginyje, todėl paskutiniai pakeitimai čia neišsaugoti.</span>'
+      + '<button class="btn sm" id="bReload">Įkelti naujausius duomenis (čia padaryti pakeitimai dings)</button>';
+    el("bReload").onclick = async()=>{ try{ await loadRemote(); lastSaved=null; renderAll(); toast("Įkelti naujausi duomenys"); }catch(e){ if(e.code==="relock") return lockNow(e.message); toast(e.message); } };
   } else if(saveErr){
     b.className="banner warn"; b.hidden=false;
-    b.innerHTML = '<span>'+esc(saveErr)+'</span><button class="btn sm" id="bRetry">Повторить сохранение</button>';
+    b.innerHTML = '<span>'+esc(saveErr)+'</span><button class="btn sm" id="bRetry">Bandyti išsaugoti dar kartą</button>';
     el("bRetry").onclick = ()=>{ saveErr=""; flush(); };
   } else { b.hidden=true; b.innerHTML=""; }
 }
 window.addEventListener("beforeunload", e=>{ if(screen==="app" && (dirty || saving)){ e.preventDefault(); e.returnValue=""; } });
 
-/* подтягиваем свежие данные при возврате на вкладку (телефон ↔ компьютер) */
+/* grįžus į kortelę įkeliami naujausi duomenys (telefonas ↔ kompiuteris) */
 async function refreshIfChanged(manual){
-  if(screen!=="app" || dirty || saving || conflict) { if(manual && dirty) toast("Сначала дождитесь сохранения"); return; }
+  if(screen!=="app" || dirty || saving || conflict) { if(manual && dirty) toast("Palaukite, kol bus išsaugota"); return; }
   try{
     const r = await gh("GET", fileUrl(dev.dataRepo, dev.dataPath));
     if(!r.ok) throw await ghFail(r);
     const j = await r.json();
-    if(j.sha === dataSha){ if(manual) toast("Данные актуальны"); return; }
-    await loadRemote(); renderAll(); toast("Подтянуты изменения с другого устройства");
+    if(j.sha === dataSha){ if(manual) toast("Duomenys naujausi"); return; }
+    await loadRemote(); renderAll(); toast("Įkelti pakeitimai iš kito įrenginio");
   }catch(e){ if(e.code==="relock") return lockNow(e.message); if(manual) toast(e.message); }
 }
 
 /* ============================================================================
-   БЛОКИРОВКА
+   UŽRAKINIMAS
    ========================================================================== */
 async function lockNow(msg){
   if(dirty || saving){ await flush(); }
-  if(dirty && !msg){ if(!confirm("Есть несохранённые изменения. Заблокировать всё равно? Они пропадут.")) return; }
+  if(dirty && !msg){ if(!confirm("Yra neišsaugotų pakeitimų. Vis tiek užrakinti? Jie dings.")) return; }
   wipe(); screen = dev ? "unlock" : "setup";
   if(screen==="unlock") renderUnlock(msg); else render();
 }
 ["pointerdown","keydown","touchstart","wheel"].forEach(ev=>window.addEventListener(ev,()=>{ lastActive=Date.now(); },{passive:true}));
-setInterval(()=>{ if(screen==="app" && Date.now()-lastActive>IDLE_MS && !dirty && !saving) lockNow("Заблокировано после 15 минут простоя."); }, 30000);
+setInterval(()=>{ if(screen==="app" && Date.now()-lastActive>IDLE_MS && !dirty && !saving) lockNow("Užrakinta po 15 min. neveikimo."); }, 30000);
 document.addEventListener("visibilitychange", ()=>{
   if(document.visibilityState!=="visible" || screen!=="app") return;
-  if(Date.now()-lastActive>IDLE_MS && !dirty && !saving) return lockNow("Заблокировано после 15 минут простоя.");
+  if(Date.now()-lastActive>IDLE_MS && !dirty && !saving) return lockNow("Užrakinta po 15 min. neveikimo.");
   refreshIfChanged(false);
 });
 
 /* ============================================================================
-   ПРИЛОЖЕНИЕ
+   PROGRAMA
    ========================================================================== */
 function paidOf(id){ let s=0; for(const p of payments){ if(p.alloc && p.alloc[id]) s+=Number(p.alloc[id])||0; } return Math.round(s*100)/100; }
 function geoOrder(p){ const g=GEO[p.id]; return g ? g[1]*1000+g[0] : 99999; }
@@ -573,13 +581,13 @@ function totals(){
           debtors:debtors.length,debtSum:debtors.reduce((s,x)=>s+x.due,0)};
 }
 
-const TABS = [["skolos","Долги"],["mokejimai","Платежи"],["kontaktai","Контакты"],["sms","SMS"],["puslapis","Публичная страница"],["nustatymai","Настройки"]];
+const TABS = [["skolos","Skolos"],["mokejimai","Mokėjimai"],["kontaktai","Kontaktai"],["sms","SMS"],["puslapis","Viešas puslapis"],["nustatymai","Nustatymai"]];
 function renderApp(){
   el("root").innerHTML = '<div class="top"><div class="wrap">'
    + '<div class="brand"><h1>SB Žiburėlis · kasa</h1><span class="yr" id="yrBadge"></span>'
    + '<span class="sync"><span class="dot" id="syncDot"></span><span id="syncTxt"></span>'
-   + '<button class="btn sm ghost" id="reload" title="Подтянуть изменения с GitHub" aria-label="Обновить">↻</button>'
-   + '<button class="btn sm ghost" id="lockBtn" title="Заблокировать" aria-label="Заблокировать">'+lockSvg.replace('width="18" height="18"','width="14" height="14"')+'</button></span></div>'
+   + '<button class="btn sm ghost" id="reload" title="Atnaujinti iš GitHub" aria-label="Atnaujinti">↻</button>'
+   + '<button class="btn sm ghost" id="lockBtn" title="Užrakinti" aria-label="Užrakinti">'+lockSvg.replace('width="18" height="18"','width="14" height="14"')+'</button></span></div>'
    + '<div class="stats" id="stats"></div><nav id="nav" role="tablist"></nav></div></div>'
    + '<main class="wrap"><div id="banner" class="banner" hidden></div><div id="view"></div></main>';
   el("reload").onclick = ()=>refreshIfChanged(true);
@@ -603,86 +611,124 @@ function renderView(){
   ({skolos:viewSkolos,mokejimai:viewMokejimai,kontaktai:viewKontaktai,sms:viewSms,puslapis:viewPuslapis,nustatymai:viewNustatymai})[tab](v);
 }
 
-/* ---------------- 1. Долги ---------------- */
+/* ---------------- rūšiavimas ---------------- */
+const plotKey = x => x.street+" "+String(x.nr).split("-").map(n=>n.padStart(4,"0")).join("-");
+function sortBy(view, arr, acc){
+  const st = sorts[view]; const f = st.k && acc[st.k]; if(!f) return arr;
+  return arr.slice().sort((a,b)=>{
+    const x=f(a), y=f(b); let c;
+    const ex = x===""||x==null, ey = y===""||y==null;
+    if(ex!==ey) return ex ? 1 : -1;                      // tušti laukai visada gale
+    if(typeof x==="number" && typeof y==="number") c = x-y;
+    else c = String(x==null?"":x).localeCompare(String(y==null?"":y), "lt", {numeric:true, sensitivity:"base"});
+    if(c===0 && a.street && b.street) c = plotKey(a).localeCompare(plotKey(b));
+    return c*st.d;
+  });
+}
+function sth(view, key, label, cls){
+  const st = sorts[view], on = st.k===key;
+  return '<th class="sortable'+(cls?' '+cls:'')+'" data-view="'+view+'" data-key="'+key+'" tabindex="0" aria-sort="'+(on?(st.d>0?"ascending":"descending"):"none")+'" title="Rūšiuoti">'+esc(label)+'<span class="arr">'+(on?(st.d>0?"▲":"▼"):"")+'</span></th>';
+}
+function bindSort(root, rerender){
+  root.querySelectorAll("th.sortable").forEach(th=>{
+    const go = ()=>{
+      const view = th.dataset.view, key = th.dataset.key, st = sorts[view];
+      const first = NUM_KEYS.has(key) ? -1 : 1;           // skaičiai ir datos — nuo didžiausio
+      if(st.k!==key){ st.k=key; st.d=first; }
+      else if(st.d===first){ st.d=-first; }
+      else { sorts[view] = JSON.parse(JSON.stringify(SORT_DEFAULT[view])); }
+      rerender();
+    };
+    th.onclick = go;
+    th.onkeydown = e=>{ if(e.key==="Enter" || e.key===" "){ e.preventDefault(); go(); } };
+  });
+}
+const ACC_PLOT = { plot:plotKey, name:x=>x.name||"", name2:x=>x.name2||"", phone:x=>x.phone||"", phone2:x=>x.phone2||"", email:x=>x.email||"",
+                   mokestis:x=>+x.mokestis||0, apSkola:x=>+x.apSkola||0, paid:x=>x.paid, due:x=>x.due };
+const ACC_PAY = { date:x=>x.date||"", descr:x=>x.descr||"", plots:x=>Object.keys(x.alloc||{}).join(", "), amount:x=>+x.amount||0 };
+
+/* ---------------- 1. Skolos ---------------- */
 function viewSkolos(v){
-  const r = rows().filter(x=>{
+  const r = sortBy("skolos", rows().filter(x=>{
     if(filter==="debt" && x.due<=0) return false;
     if(filter==="paid" && x.due>0) return false;
     if(q){ const s=(x.id+" "+x.street+" "+x.nr+" "+x.name+" "+(x.name2||"")).toLowerCase(); if(!s.includes(q.toLowerCase())) return false; }
     return true;
-  });
+  }), ACC_PLOT);
   const t = totals();
-  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Сводка по участкам</h2><span class="sp"></span><div class="toolbar">'
-    + seg("filter",[["all","Все"],["debt","Должники"],["paid","Без долга"]],filter)
-    + '<input id="q" type="search" placeholder="Участок или имя" value="'+esc(q)+'" style="width:180px"></div></div>'
-    + '<div class="tablewrap"><table><thead><tr><th>Sklypas</th><th>Vardas</th><th class="r hm">Mokestis</th><th class="r hm">Sena skola</th><th class="r hm">Sumokėta</th><th class="r">Liko</th><th class="hm"></th></tr></thead><tbody>'
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Sklypų suvestinė</h2><span class="sp"></span><div class="toolbar">'
+    + seg("filter",[["all","Visi"],["debt","Skolininkai"],["paid","Be skolos"]],filter)
+    + '<input id="q" type="search" placeholder="Sklypas arba vardas" value="'+esc(q)+'" style="width:180px"></div></div>'
+    + '<div class="tablewrap"><table><thead><tr>'+sth("skolos","plot","Sklypas")+sth("skolos","name","Vardas")+sth("skolos","mokestis","Mokestis","r hm")+sth("skolos","apSkola","Sena skola","r hm")+sth("skolos","paid","Sumokėta","r hm")+sth("skolos","due","Liko","r")+'<th class="hm"></th></tr></thead><tbody>'
     + r.map(x=>'<tr class="rowlink" data-id="'+esc(x.id)+'"><td class="plot">'+esc(x.street+" "+x.nr)+'</td>'
         + '<td class="nm">'+esc(x.name||"—")+(x.note?' <span class="pill warn" title="'+esc(x.note)+'">!</span>':'')+'</td>'
         + '<td class="r hm">'+eur(x.mokestis)+'</td><td class="r hm '+(x.apSkola?"":"z")+'">'+eur(x.apSkola)+'</td>'
         + '<td class="r hm '+(x.paid?"":"z")+'">'+eur(x.paid)+'</td>'
         + '<td class="r '+(x.due>0?"due":(x.due<0?"cred":"okmark"))+'">'+(x.due>0?eur(x.due):(x.due<0?eur(x.due):"✓"))+'</td>'
-        + '<td class="r hm"><button class="btn sm ghost edit" data-id="'+esc(x.id)+'">править</button></td></tr>').join("")
-    + '</tbody><tfoot><tr><td colspan="2">Итого '+r.length+' из '+t.n+'</td>'
+        + '<td class="r hm"><button class="btn sm ghost edit" data-id="'+esc(x.id)+'">taisyti</button></td></tr>').join("")
+    + '</tbody><tfoot><tr><td colspan="2">Iš viso '+r.length+' iš '+t.n+'</td>'
     + '<td class="r hm">'+eur(r.reduce((s,x)=>s+(+x.mokestis||0),0))+'</td><td class="r hm">'+eur(r.reduce((s,x)=>s+(+x.apSkola||0),0))+'</td>'
     + '<td class="r hm">'+eur(r.reduce((s,x)=>s+x.paid,0))+'</td><td class="r due">'+eur(r.reduce((s,x)=>s+x.due,0))+'</td><td class="hm"></td></tr></tfoot></table></div></div>';
   el("q").oninput = e => { q=e.target.value; const p=e.target.selectionStart; viewSkolos(v); const n=el("q"); n.focus(); try{ n.setSelectionRange(p,p); }catch(_){} };
   v.querySelectorAll("[data-seg=filter] button").forEach(b=>b.onclick=()=>{filter=b.dataset.v;viewSkolos(v);});
   v.querySelectorAll("tr.rowlink").forEach(tr=>tr.onclick=()=>editPlot(tr.dataset.id));
+  bindSort(v, ()=>viewSkolos(v));
 }
 function seg(name,opts,cur){ return '<span data-seg="'+name+'" class="toolbar" style="gap:2px">'+opts.map(([k,l])=>'<button class="btn sm'+(k===cur?" pri":"")+'" data-v="'+k+'">'+l+'</button>').join("")+'</span>'; }
 function editPlot(id){
   const p = plots.find(x=>x.id===id); if(!p) return;
-  modal('Участок '+p.street+" "+p.nr,
+  modal('Sklypas '+p.street+" "+p.nr,
     '<div class="grid2">'+f("Mokestis "+settings.year,"m_mok","number",p.mokestis)+f("Sena skola (AP skola)","m_ap","number",p.apSkola)
     + f("Vardas","m_name","text",p.name)+f("Telefonas","m_tel","tel",p.phone)+f("Vardas 2","m_name2","text",p.name2||"")+f("Telefonas 2","m_tel2","tel",p.phone2||"")+'</div>'
     + '<div style="margin-top:10px">'+f("El. paštas","m_mail","email",p.email||"")+'</div>'
-    + '<div class="field" style="margin-top:10px"><label for="m_note">Заметка</label><textarea id="m_note" rows="2">'+esc(p.note||"")+'</textarea></div>'
-    + '<p class="hint" style="margin:10px 0 0">Оплачено за '+settings.year+': <b class="mono">'+eur(paidOf(p.id))+' €</b> — считается из журнала платежей.</p>',
+    + '<div class="field" style="margin-top:10px"><label for="m_note">Pastaba</label><textarea id="m_note" rows="2">'+esc(p.note||"")+'</textarea></div>'
+    + '<p class="hint" style="margin:10px 0 0">Sumokėta už '+settings.year+': <b class="mono">'+eur(paidOf(p.id))+' €</b> — skaičiuojama pagal mokėjimų žurnalą.</p>',
     ()=>{
       p.mokestis=Number(el("m_mok").value)||0; p.apSkola=Number(el("m_ap").value)||0;
       p.name=el("m_name").value.trim(); p.phone=el("m_tel").value.trim(); p.name2=el("m_name2").value.trim();
       p.phone2=el("m_tel2").value.trim(); p.email=el("m_mail").value.trim(); p.note=el("m_note").value.trim();
-      touch(); renderAll(); toast("Изменено");
+      touch(); renderAll(); toast("Pakeista");
     });
 }
 const f=(lab,id,type,val)=>'<div class="field"><label for="'+id+'">'+esc(lab)+'</label><input id="'+id+'" type="'+type+'" value="'+esc(val)+'"'+(type==="number"?' step="any" inputmode="decimal"':'')+'></div>';
 
-/* ---------------- 2. Платежи ---------------- */
+/* ---------------- 2. Mokėjimai ---------------- */
 function viewMokejimai(v){
-  const list = payments.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
-  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Разнос выписки</h2><span class="sp"></span><button class="btn" id="addOne">Внести платёж вручную</button></div>'
-   + '<div class="panel-bd"><p class="hint" style="margin:0 0 8px">Вставьте строки выписки Revolut — CSV с заголовком или просто скопированный текст. Номер участка берётся из описания (<span class="mono">6-20,23</span>, <span class="mono">7-5-1</span>); если его нет — ищется по фамилии.</p>'
+  const list = sortBy("journal", payments.slice(), ACC_PAY);
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Išrašo paskirstymas</h2><span class="sp"></span><button class="btn" id="addOne">Įvesti mokėjimą rankiniu būdu</button></div>'
+   + '<div class="panel-bd"><p class="hint" style="margin:0 0 8px">Įklijuokite Revolut išrašo eilutes — CSV su antrašte arba tiesiog nukopijuotą tekstą. Sklypo numeris imamas iš mokėjimo paskirties (<span class="mono">6-20,23</span>, <span class="mono">7-5-1</span>); jei jo nėra — ieškoma pagal pavardę.</p>'
    + '<textarea id="stmt" rows="6" placeholder="2026-09-15&#9;Payment from VARDAS PAVARDĖ 6-11&#9;40.00"></textarea>'
-   + '<div class="toolbar" style="margin-top:8px"><button class="btn pri" id="parseBtn">Разобрать</button><button class="btn ghost" id="clearBtn">Очистить</button></div>'
+   + '<div class="toolbar" style="margin-top:8px"><button class="btn pri" id="parseBtn">Atpažinti</button><button class="btn ghost" id="clearBtn">Išvalyti</button></div>'
    + '<div id="stage"></div></div></div>'
-   + '<div class="panel"><div class="panel-hd"><h2>Журнал '+settings.year+'</h2><span class="sp"></span><span class="hint">'+list.length+' записей · '+eur(list.reduce((s,x)=>s+(+x.amount||0),0))+' €</span></div>'
-   + '<div class="tablewrap"><table><thead><tr><th>Data</th><th>Operacija</th><th>Sklypai</th><th class="r">Suma</th><th></th></tr></thead><tbody>'
+   + '<div class="panel"><div class="panel-hd"><h2>Žurnalas '+settings.year+'</h2><span class="sp"></span><span class="hint">Įrašų: '+list.length+' · '+eur(list.reduce((s,x)=>s+(+x.amount||0),0))+' €</span></div>'
+   + '<div class="tablewrap"><table><thead><tr>'+sth("journal","date","Data")+sth("journal","descr","Operacija")+sth("journal","plots","Sklypai")+sth("journal","amount","Suma","r")+'<th></th></tr></thead><tbody>'
    + list.map(p=>'<tr><td class="mono">'+esc(p.date)+'</td><td>'+esc(p.descr)+'</td>'
        + '<td class="mono">'+Object.keys(p.alloc||{}).map(k=>esc(k)+"&nbsp;"+eur(p.alloc[k])).join(" · ")+'</td>'
-       + '<td class="r">'+eur(p.amount)+'</td><td class="r"><button class="btn sm ghost del" data-id="'+esc(p.id)+'">удалить</button></td></tr>').join("")
+       + '<td class="r">'+eur(p.amount)+'</td><td class="r"><button class="btn sm ghost del" data-id="'+esc(p.id)+'">ištrinti</button></td></tr>').join("")
    + '</tbody></table></div></div>';
-  el("parseBtn").onclick = ()=>{ staged = parseStatement(el("stmt").value); renderStage(); if(!staged.length) toast("Не нашёл ни одного поступления в тексте"); };
+  el("parseBtn").onclick = ()=>{ staged = parseStatement(el("stmt").value); renderStage(); if(!staged.length) toast("Tekste nerasta nė vienos įplaukos"); };
   el("clearBtn").onclick = ()=>{ el("stmt").value=""; staged=null; renderStage(); };
   el("addOne").onclick = manualPayment;
   v.querySelectorAll(".del").forEach(b=>b.onclick=()=>{
     const p = payments.find(x=>x.id===b.dataset.id); if(!p) return;
-    if(!confirm("Удалить платёж «"+p.descr+"» на "+eur(p.amount)+" €?")) return;
-    payments = payments.filter(x=>x.id!==b.dataset.id); touch(); renderAll(); toast("Удалено");
+    if(!confirm("Ištrinti mokėjimą „"+p.descr+"“ – "+eur(p.amount)+" €?")) return;
+    payments = payments.filter(x=>x.id!==b.dataset.id); touch(); renderAll(); toast("Ištrinta");
   });
+  bindSort(v, ()=>{ const t = el("stmt").value; viewMokejimai(v); el("stmt").value = t; });
   renderStage();
 }
 function renderStage(){
   const box = el("stage"); if(!box) return;
   if(!staged || !staged.length){ box.innerHTML=""; return; }
-  box.innerHTML = '<div style="margin-top:12px" class="tablewrap"><table><thead><tr><th style="width:28px"></th><th>Data</th><th>Operacija</th><th>Sklypai</th><th class="r">Suma</th><th>Статус</th></tr></thead><tbody>'
-   + staged.map((s,i)=>'<tr><td><input type="checkbox" data-i="'+i+'" class="chk" aria-label="Записать строку"'+(s.take?" checked":"")+(s.bad?" disabled":"")+'></td>'
+  box.innerHTML = '<div style="margin-top:12px" class="tablewrap"><table><thead><tr><th style="width:28px"></th><th>Data</th><th>Operacija</th><th>Sklypai</th><th class="r">Suma</th><th>Būsena</th></tr></thead><tbody>'
+   + staged.map((s,i)=>'<tr><td><input type="checkbox" data-i="'+i+'" class="chk" aria-label="Įrašyti eilutę"'+(s.take?" checked":"")+(s.bad?" disabled":"")+'></td>'
       + '<td><input type="date" data-i="'+i+'" class="fd" value="'+esc(s.date)+'" style="width:150px"></td>'
       + '<td><input type="text" data-i="'+i+'" class="ft" value="'+esc(s.descr)+'" style="width:100%;min-width:200px"></td>'
       + '<td><input type="text" data-i="'+i+'" class="fp mono" value="'+esc(Object.keys(s.alloc).join(", "))+'" style="width:130px"></td>'
       + '<td class="r"><input type="number" step="any" inputmode="decimal" data-i="'+i+'" class="fa" value="'+s.amount+'" style="width:84px;text-align:right"></td>'
       + '<td>'+statusPill(s)+'</td></tr>').join("")
-   + '</tbody></table></div><div class="toolbar" style="margin-top:10px"><button class="btn pri" id="commit">Записать отмеченные</button>'
-   + '<span class="hint">Участки через запятую. Если сумма ровно покрывает их долги — разносится по долгам, иначе поровну.</span></div>';
+   + '</tbody></table></div><div class="toolbar" style="margin-top:10px"><button class="btn pri" id="commit">Įrašyti pažymėtus</button>'
+   + '<span class="hint">Sklypai atskiriami kableliais. Jei suma tiksliai padengia jų skolas — paskirstoma pagal skolas, kitaip po lygiai.</span></div>';
   box.querySelectorAll(".chk").forEach(c=>c.onchange=()=>{staged[+c.dataset.i].take=c.checked;});
   box.querySelectorAll(".fd").forEach(c=>c.onchange=()=>{staged[+c.dataset.i].date=c.value;restage();});
   box.querySelectorAll(".ft").forEach(c=>c.onchange=()=>{staged[+c.dataset.i].descr=c.value;restage();});
@@ -696,11 +742,11 @@ function renderStage(){
 }
 function restage(){ staged.forEach(s=>{ if(!s.bad) s.dup=isDup(s); }); renderStage(); }
 function statusPill(s){
-  if(s.bad) return '<span class="pill due">строка не разобрана</span>';
-  if(s.dup) return '<span class="pill warn">уже в журнале</span>';
-  if(!Object.keys(s.alloc).length) return '<span class="pill due">участок не определён</span>';
-  if(s.guess) return '<span class="pill cred">по фамилии — проверьте</span>';
-  return '<span class="pill ok">готово</span>';
+  if(s.bad) return '<span class="pill due">eilutė neatpažinta</span>';
+  if(s.dup) return '<span class="pill warn">jau žurnale</span>';
+  if(!Object.keys(s.alloc).length) return '<span class="pill due">sklypas nenustatytas</span>';
+  if(s.guess) return '<span class="pill cred">pagal pavardę — patikrinkite</span>';
+  return '<span class="pill ok">paruošta</span>';
 }
 function isDup(s){ return payments.some(p=>p.date===s.date && Math.abs((+p.amount||0)-s.amount)<0.005 && (p.descr||"").trim()===(s.descr||"").trim()); }
 function split(ids,amount){
@@ -794,54 +840,55 @@ function splitCsv(line){
 }
 function commitStaged(){
   const take = (staged||[]).filter(s=>s.take && s.amount>0 && !s.bad && Object.keys(s.alloc).length);
-  if(!take.length) return toast("Нечего записывать");
+  if(!take.length) return toast("Nėra ką įrašyti");
   for(const s of take) payments.push({id:newId(), date:s.date, descr:s.descr, amount:s.amount, alloc:s.alloc});
   staged = (staged||[]).filter(s=>!take.includes(s)); if(!staged.length) staged=null;
-  touch(); renderAll(); toast("Записано: "+take.length);
+  touch(); renderAll(); toast("Įrašyta: "+take.length);
 }
 function manualPayment(){
-  modal("Новый платёж",
-    '<div class="grid2">'+f("Дата","mp_d","date",today())+f("Сумма, €","mp_a","number","")+'</div>'
-    + '<div style="margin-top:10px">'+f("Описание","mp_t","text","")+'</div>'
-    + '<div style="margin-top:10px">'+f("Участки через запятую (6-11, 7-5-1)","mp_p","text","")+'</div>',
+  modal("Naujas mokėjimas",
+    '<div class="grid2">'+f("Data","mp_d","date",today())+f("Suma, €","mp_a","number","")+'</div>'
+    + '<div style="margin-top:10px">'+f("Mokėjimo paskirtis","mp_t","text","")+'</div>'
+    + '<div style="margin-top:10px">'+f("Sklypai per kablelį (6-11, 7-5-1)","mp_p","text","")+'</div>',
     ()=>{
       const amt=Number(el("mp_a").value)||0;
       const ids=el("mp_p").value.split(",").map(x=>x.trim()).filter(x=>plots.some(p=>p.id===x));
-      if(amt<=0 || !ids.length){ toast("Нужны сумма и хотя бы один существующий участок"); return false; }
+      if(amt<=0 || !ids.length){ toast("Reikia sumos ir bent vieno esamo sklypo"); return false; }
       payments.push({id:newId(), date:el("mp_d").value||today(), descr:el("mp_t").value.trim()||"Įnašas", amount:amt, alloc:allocSmart(ids,amt)});
-      touch(); renderAll(); toast("Записано");
+      touch(); renderAll(); toast("Įrašyta");
     });
 }
 
-/* ---------------- 3. Контакты ---------------- */
+/* ---------------- 3. Kontaktai ---------------- */
 function viewKontaktai(v){
-  const r = rows(); const noPhone = r.filter(x=>!x.phone && !x.phone2);
-  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Справочник садоводов</h2><span class="sp"></span>'
-   + '<span class="hint">'+r.length+' участков · '+new Set(r.map(x=>x.phone).filter(Boolean)).size+' уникальных номеров</span></div>'
-   + (noPhone.length?'<div class="panel-bd" style="padding-bottom:0"><div class="note">Без телефона: '+noPhone.map(x=>esc(x.street+" "+x.nr+" ("+(x.name||"—")+")")).join(", ")+'</div></div>':'')
-   + '<div class="tablewrap"><table><thead><tr><th>Sklypas</th><th>Vardas</th><th>Telefonas</th><th>Vardas 2</th><th>Telefonas 2</th><th>El. paštas</th><th></th></tr></thead><tbody>'
+  const r = sortBy("kontaktai", rows(), ACC_PLOT); const noPhone = r.filter(x=>!x.phone && !x.phone2);
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Sodininkų sąrašas</h2><span class="sp"></span>'
+   + '<span class="hint">Sklypų: '+r.length+' · unikalių numerių: '+new Set(r.map(x=>x.phone).filter(Boolean)).size+'</span></div>'
+   + (noPhone.length?'<div class="panel-bd" style="padding-bottom:0"><div class="note">Be telefono: '+noPhone.map(x=>esc(x.street+" "+x.nr+" ("+(x.name||"—")+")")).join(", ")+'</div></div>':'')
+   + '<div class="tablewrap"><table><thead><tr>'+sth("kontaktai","plot","Sklypas")+sth("kontaktai","name","Vardas")+sth("kontaktai","phone","Telefonas")+sth("kontaktai","name2","Vardas 2")+sth("kontaktai","phone2","Telefonas 2")+sth("kontaktai","email","El. paštas")+'<th></th></tr></thead><tbody>'
    + r.map(x=>'<tr><td class="plot">'+esc(x.street+" "+x.nr)+'</td><td class="nm">'+esc(x.name||"—")+'</td>'
       + '<td class="mono">'+(x.phone?'<a href="tel:'+esc(x.phone)+'">'+esc(x.phone)+'</a>':'—')+'</td>'
       + '<td class="nm">'+esc(x.name2||"")+'</td><td class="mono">'+(x.phone2?'<a href="tel:'+esc(x.phone2)+'">'+esc(x.phone2)+'</a>':'')+'</td>'
-      + '<td class="nm">'+esc(x.email||"")+'</td><td class="r"><button class="btn sm ghost edit" data-id="'+esc(x.id)+'">править</button></td></tr>').join("")
+      + '<td class="nm">'+esc(x.email||"")+'</td><td class="r"><button class="btn sm ghost edit" data-id="'+esc(x.id)+'">taisyti</button></td></tr>').join("")
    + '</tbody></table></div></div>'
-   + '<div class="panel"><div class="panel-bd"><div class="toolbar"><button class="btn" id="csvK">Скачать контакты CSV</button><button class="btn ghost" id="addPlot">Добавить участок</button></div>'
-   + '<p class="hint" style="margin:10px 0 0">CSV скачивается незашифрованным — не выкладывайте его в публичные места.</p></div></div>';
+   + '<div class="panel"><div class="panel-bd"><div class="toolbar"><button class="btn" id="csvK">Atsisiųsti kontaktus (CSV)</button><button class="btn ghost" id="addPlot">Pridėti sklypą</button></div>'
+   + '<p class="hint" style="margin:10px 0 0">CSV atsisiunčiamas nešifruotas — nekelkite jo į viešas vietas.</p></div></div>';
   v.querySelectorAll(".edit").forEach(b=>b.onclick=()=>editPlot(b.dataset.id));
   el("csvK").onclick = ()=>downloadCsv("SB-Ziburelis-kontaktai-"+settings.year+".csv", ["Sklypas","Vardas","Telefonas","Vardas 2","Telefonas 2","El pastas"], r.map(x=>[x.street+" "+x.nr,x.name,x.phone,x.name2,x.phone2,x.email]));
   el("addPlot").onclick = addPlot;
+  bindSort(v, ()=>viewKontaktai(v));
 }
 function addPlot(){
-  modal("Новый участок",
-    '<div class="grid2">'+f("Улица (6-oji / 7-oji)","ap_s","text","6-oji")+f("Номер","ap_n","text","")+f("Mokestis","ap_m","number","40")+f("Sena skola","ap_ap","number","0")+f("Vardas","ap_name","text","")+f("Telefonas","ap_tel","tel","")+'</div>'
-    + '<p class="hint" style="margin:10px 0 0">Новый участок попадёт в таблицы, но не на схему публичной страницы — её план задан в коде.</p>',
+  modal("Naujas sklypas",
+    '<div class="grid2">'+f("Gatvė (6-oji / 7-oji)","ap_s","text","6-oji")+f("Numeris","ap_n","text","")+f("Mokestis","ap_m","number","40")+f("Sena skola","ap_ap","number","0")+f("Vardas","ap_name","text","")+f("Telefonas","ap_tel","tel","")+'</div>'
+    + '<p class="hint" style="margin:10px 0 0">Naujas sklypas atsiras lentelėse, bet ne viešo puslapio schemoje — planas nustatytas programos kode.</p>',
     ()=>{
       const st=el("ap_s").value.trim(), nr=el("ap_n").value.trim();
-      if(!/^[67]-oji$/.test(st) || !nr){ toast("Улица — 6-oji или 7-oji, номер обязателен"); return false; }
+      if(!/^[67]-oji$/.test(st) || !nr){ toast("Gatvė — 6-oji arba 7-oji, numeris privalomas"); return false; }
       const id = st[0]+"-"+nr;
-      if(plots.some(p=>p.id===id)){ toast("Такой участок уже есть"); return false; }
+      if(plots.some(p=>p.id===id)){ toast("Toks sklypas jau yra"); return false; }
       plots.push({id:id,street:st,nr:nr,mokestis:Number(el("ap_m").value)||0,apSkola:Number(el("ap_ap").value)||0,name:el("ap_name").value.trim(),phone:el("ap_tel").value.trim(),name2:"",phone2:"",email:"",note:""});
-      touch(); renderAll(); toast("Участок добавлен");
+      touch(); renderAll(); toast("Sklypas pridėtas");
     });
 }
 
@@ -853,29 +900,29 @@ function smsText(x){
 function smsHref(tel,txt){ const ios=/iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent); return "sms:"+tel+(ios?"&":"?")+"body="+encodeURIComponent(txt); }
 function viewSms(v){
   const d = rows().filter(x=>x.due>0); const seen = {};
-  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Напоминания должникам</h2><span class="sp"></span><span class="hint">'+d.length+' участков · '+eur(d.reduce((s,x)=>s+x.due,0))+' €</span></div>'
-   + '<div class="panel-bd"><div class="toolbar" style="margin-bottom:12px"><button class="btn" id="copyAll">Скопировать все тексты</button><button class="btn" id="csvS">Скачать CSV должников</button><button class="btn ghost" id="editTpl">Шаблон сообщения</button></div>'
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Priminimai skolininkams</h2><span class="sp"></span><span class="hint">Sklypų: '+d.length+' · '+eur(d.reduce((s,x)=>s+x.due,0))+' €</span></div>'
+   + '<div class="panel-bd"><div class="toolbar" style="margin-bottom:12px"><button class="btn" id="copyAll">Kopijuoti visus tekstus</button><button class="btn" id="csvS">Atsisiųsti skolininkų CSV</button><button class="btn ghost" id="editTpl">Žinutės šablonas</button></div>'
    + '<div class="smslist">'
    + d.map(x=>{
        const tel = x.phone || x.phone2 || ""; const dup = tel && seen[tel]; if(tel) seen[tel]=true; const txt = smsText(x);
        return '<div class="smscard"><div class="hd"><span class="pill due">'+eur(x.due)+' €</span><span class="who">'+esc(x.street+" "+x.nr)+' · '+esc(x.name||"—")+'</span>'
-        + '<span class="tel">'+(tel?esc(tel):'<span class="pill warn">нет номера</span>')+'</span>'+(dup?'<span class="pill warn">тот же номер, что выше</span>':'')+'</div>'
+        + '<span class="tel">'+(tel?esc(tel):'<span class="pill warn">nėra numerio</span>')+'</span>'+(dup?'<span class="pill warn">tas pats numeris kaip aukščiau</span>':'')+'</div>'
         + '<pre>'+esc(txt)+'</pre><div class="toolbar">'
-        + (tel?'<a class="btn pri" href="'+esc(smsHref(tel,txt))+'">Открыть SMS</a>':'')
-        + '<button class="btn copy" data-t="'+esc(txt)+'">Скопировать текст</button>'
-        + (tel?'<button class="btn ghost copy" data-t="'+esc(tel)+'">Скопировать номер</button>':'')+'</div></div>';
+        + (tel?'<a class="btn pri" href="'+esc(smsHref(tel,txt))+'">Atidaryti SMS</a>':'')
+        + '<button class="btn copy" data-t="'+esc(txt)+'">Kopijuoti tekstą</button>'
+        + (tel?'<button class="btn ghost copy" data-t="'+esc(tel)+'">Kopijuoti numerį</button>':'')+'</div></div>';
      }).join("")
    + '</div></div></div>';
   v.querySelectorAll(".copy").forEach(b=>b.onclick=()=>copy(b.dataset.t));
   el("copyAll").onclick = ()=>copy(d.map(x=>x.street+" "+x.nr+" — "+eur(x.due)+" EUR · "+(x.name||"—")+" · "+(x.phone||x.phone2||"NĖRA NUMERIO")+"\n"+smsText(x)).join("\n"+"-".repeat(44)+"\n"));
   el("csvS").onclick = ()=>downloadCsv("SB-Ziburelis-skolininkai-"+today()+".csv", ["Gatve","Sklypas","Skola EUR","Vardas","Telefonas","Vardas 2","Telefonas 2"], d.map(x=>[x.street,x.nr,x.due,x.name,x.phone,x.name2,x.phone2]));
-  el("editTpl").onclick = ()=>modal("Шаблон SMS",
-    '<div class="field"><label for="tpl">Текст</label><textarea id="tpl" rows="8">'+esc(settings.smsTemplate||DEFAULT_SMS)+'</textarea></div>'
-    + '<p class="hint" style="margin:8px 0 0">Подстановки: <span class="mono">{sklypas} {skola} {metai} {nuoroda} {gavejas} {iban} {grynais}</span></p>',
-    ()=>{ settings.smsTemplate = el("tpl").value; touch(); renderView(); toast("Шаблон изменён"); });
+  el("editTpl").onclick = ()=>modal("SMS šablonas",
+    '<div class="field"><label for="tpl">Tekstas</label><textarea id="tpl" rows="8">'+esc(settings.smsTemplate||DEFAULT_SMS)+'</textarea></div>'
+    + '<p class="hint" style="margin:8px 0 0">Įterpiami laukai: <span class="mono">{sklypas} {skola} {metai} {nuoroda} {gavejas} {iban} {grynais}</span></p>',
+    ()=>{ settings.smsTemplate = el("tpl").value; touch(); renderView(); toast("Šablonas pakeistas"); });
 }
 
-/* ---------------- 5. Публичная страница ---------------- */
+/* ---------------- 5. Viešas puslapis ---------------- */
 function publicHtml(){
   const r = rows(), t = totals(), d = today();
   const box = id=>{
@@ -928,14 +975,14 @@ function publicHtml(){
   + ' Žalias ✓ reiškia, kad sklypas atsiskaitęs; permoka perkeliama į kitus metus.\n Pastebėjote netikslumą — praneškite valdybai.</p>\n'
   + '</div>\n<footer>SB Žiburėlis · atnaujinta '+d+'</footer>\n</body></html>\n';
 }
-/* страховка: ни одно имя, телефон или e-mail садовода не должны попасть в публичный файл */
+/* apsauga: joks sodininko vardas, telefonas ar el. paštas negali patekti į viešą failą */
 function findLeaks(html){
   const H = norm(html), hits = new Set();
   for(const p of plots){
-    for(const ph of [p.phone,p.phone2]){ const dg=String(ph||"").replace(/\D/g,""); if(dg.length>=8 && html.includes(dg.slice(-8))) hits.add(p.id+": телефон"); }
+    for(const ph of [p.phone,p.phone2]){ const dg=String(ph||"").replace(/\D/g,""); if(dg.length>=8 && html.includes(dg.slice(-8))) hits.add(p.id+": telefonas"); }
     if(p.email && H.includes(norm(p.email))) hits.add(p.id+": e-mail");
     for(const tkn of (norm(p.name)+" "+norm(p.name2)).split(/[^A-Z]+/).filter(t=>t.length>=5)){
-      if(new RegExp("(^|[^A-Z])"+tkn+"([^A-Z]|$)").test(H)) hits.add(p.id+": имя «"+tkn+"»");
+      if(new RegExp("(^|[^A-Z])"+tkn+"([^A-Z]|$)").test(H)) hits.add(p.id+": vardas „"+tkn+"“");
     }
   }
   return Array.from(hits);
@@ -943,15 +990,15 @@ function findLeaks(html){
 function viewPuslapis(v){
   const html = publicHtml(); const leaks = findLeaks(html);
   const url = "https://"+dev.owner.toLowerCase()+".github.io/"+dev.pubRepo+"/";
-  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Публичная страница долгов</h2><span class="sp"></span><div class="toolbar">'
-   + '<button class="btn pri" id="pub"'+(leaks.length?' disabled':'')+'>Опубликовать на сайте</button><button class="btn" id="dl">Скачать index.html</button></div></div>'
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Viešas skolų puslapis</h2><span class="sp"></span><div class="toolbar">'
+   + '<button class="btn pri" id="pub"'+(leaks.length?' disabled':'')+'>Paskelbti svetainėje</button><button class="btn" id="dl">Atsisiųsti index.html</button></div></div>'
    + '<div class="panel-bd">'
-   + (leaks.length?'<div class="err" style="margin-bottom:12px">Публикация заблокирована: в странице нашлись персональные данные — '+esc(leaks.join(", "))+'.</div>':'')
-   + '<div class="note info">Кнопка записывает <span class="mono">'+esc(dev.pubPath)+'</span> в публичный репозиторий <span class="mono">'+esc(dev.pubRepo)+'</span>. На сайте <span class="mono">'+esc(url)+'</span> обновится через 1–2 минуты; короткая ссылка из SMS не меняется. На странице только номера участков и суммы — перед отправкой приложение проверяет, что в ней нет имён, телефонов и e-mail.</div>'
-   + '<div class="prev" style="margin-top:12px"><iframe id="pv" title="Предпросмотр публичной страницы" sandbox></iframe></div></div></div>'
-   + '<div class="panel"><div class="panel-hd"><h2>Выгрузки</h2></div><div class="panel-bd"><div class="toolbar">'
-   + '<button class="btn" id="dlAll">Все данные (JSON)</button><button class="btn" id="dlMok">Mokestis '+settings.year+' (CSV)</button><button class="btn" id="dlPay">Mokėjimai '+settings.year+' (CSV)</button></div>'
-   + '<p class="hint" style="margin:10px 0 0">Выгрузки не зашифрованы — это резервная копия для вашего компьютера и отчётность бендрии. CSV открываются в Excel с литовскими буквами.</p></div></div>';
+   + (leaks.length?'<div class="err" style="margin-bottom:12px">Paskelbimas užblokuotas: puslapyje rasta asmens duomenų — '+esc(leaks.join(", "))+'.</div>':'')
+   + '<div class="note info">Mygtukas įrašo <span class="mono">'+esc(dev.pubPath)+'</span> į viešą repozitoriją <span class="mono">'+esc(dev.pubRepo)+'</span>. Svetainėje <span class="mono">'+esc(url)+'</span> atsinaujins per 1–2 minutes; trumpoji nuoroda SMS žinutėse nesikeičia. Puslapyje tik sklypų numeriai ir sumos — prieš siunčiant programa patikrina, kad jame nėra vardų, telefonų ir el. pašto adresų.</div>'
+   + '<div class="prev" style="margin-top:12px"><iframe id="pv" title="Viešo puslapio peržiūra" sandbox></iframe></div></div></div>'
+   + '<div class="panel"><div class="panel-hd"><h2>Eksportas</h2></div><div class="panel-bd"><div class="toolbar">'
+   + '<button class="btn" id="dlAll">Visi duomenys (JSON)</button><button class="btn" id="dlMok">Mokestis '+settings.year+' (CSV)</button><button class="btn" id="dlPay">Mokėjimai '+settings.year+' (CSV)</button></div>'
+   + '<p class="hint" style="margin:10px 0 0">Eksportuoti failai nešifruoti — tai atsarginė kopija jūsų kompiuteriui ir bendrijos ataskaitoms. CSV atsidaro Excel su lietuviškomis raidėmis.</p></div></div>';
   el("pv").srcdoc = html;
   el("pub").onclick = publishPublic;
   el("dl").onclick = ()=>download("index.html", publicHtml(), "text/html");
@@ -961,60 +1008,60 @@ function viewPuslapis(v){
 }
 async function publishPublic(){
   const html = publicHtml(); const leaks = findLeaks(html);
-  if(leaks.length) return toast("Публикация заблокирована: найдены персональные данные");
-  if(!confirm("Опубликовать страницу долгов? Её видит любой, у кого есть ссылка: номера участков и суммы, без имён.")) return;
-  busy("pub", true, "Публикую…");
+  if(leaks.length) return toast("Paskelbimas užblokuotas: rasta asmens duomenų");
+  if(!confirm("Paskelbti skolų puslapį? Jį mato visi, turintys nuorodą: sklypų numeriai ir sumos, be vardų.")) return;
+  busy("pub", true, "Skelbiama…");
   try{
     const cur = await getFile(dev.pubRepo, dev.pubPath);
-    if(cur && cur.text === html){ toast("На сайте уже эта версия"); return; }
+    if(cur && cur.text === html){ toast("Svetainėje jau ši versija"); return; }
     await putFile(dev.pubRepo, dev.pubPath, html, cur?cur.sha:null, "Skolų lentelė atnaujinta "+today());
-    toast("Опубликовано. Сайт обновится через 1–2 минуты");
-  }catch(e){ toast(e.code==="notfound" ? "Публичный репозиторий не найден или у токена нет к нему доступа" : e.message); }
-  finally{ busy("pub", false, "Опубликовать на сайте"); }
+    toast("Paskelbta. Svetainė atsinaujins per 1–2 minutes");
+  }catch(e){ toast(e.code==="notfound" ? "Viešoji repozitorija nerasta arba raktas neturi prie jos prieigos" : e.message); }
+  finally{ busy("pub", false, "Paskelbti svetainėje"); }
 }
 
-/* ---------------- 6. Настройки ---------------- */
+/* ---------------- 6. Nustatymai ---------------- */
 function viewNustatymai(v){
-  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Реквизиты и год</h2></div><div class="panel-bd">'
-   + '<div class="grid2">'+f("Год учёта","s_y","number",settings.year)+f("Ссылка для SMS","s_u","text",settings.publicUrl)+f("Получатель перевода","s_p","text",settings.payee)+f("IBAN","s_i","text",settings.iban)+'</div>'
-   + '<div style="margin-top:10px">'+f("Наличными по адресу","s_c","text",settings.cash)+'</div>'
-   + '<p class="hint" style="margin:10px 0 0">Реквизиты подставляются только в SMS. На публичную страницу они не попадают.</p>'
-   + '<div class="toolbar" style="margin-top:12px"><button class="btn pri" id="sv">Сохранить</button></div></div></div>'
-   + '<div class="panel"><div class="panel-hd"><h2>Безопасность</h2></div><div class="panel-bd">'
-   + '<dl class="kv"><dt>Данные</dt><dd>'+esc(dev.owner+"/"+dev.dataRepo+"/"+dev.dataPath)+'</dd><dt>Страница</dt><dd>'+esc(dev.owner+"/"+dev.pubRepo+"/"+dev.pubPath)+'</dd>'
-   + '<dt>Шифрование</dt><dd>AES-256-GCM · PBKDF2-SHA256 × '+dataIter.toLocaleString("ru-RU")+'</dd><dt>Автоблокировка</dt><dd>через 15 минут простоя</dd></dl>'
-   + '<div class="toolbar" style="margin-top:14px"><button class="btn" id="chpw">Сменить пароль</button><button class="btn" id="lk">Заблокировать</button>'
-   + '<a class="btn ghost" href="https://github.com/'+esc(encodeURIComponent(dev.owner))+'/'+esc(encodeURIComponent(dev.dataRepo))+'/commits" target="_blank" rel="noopener noreferrer">История изменений на GitHub</a>'
-   + '<button class="btn dan" id="fg">Забыть это устройство</button></div>'
-   + '<p class="hint" style="margin:10px 0 0">Каждое сохранение — отдельный коммит в приватном репозитории. Откатиться можно, восстановив нужную версию файла на GitHub.</p></div></div>'
-   + '<div class="panel"><div class="panel-hd"><h2>Закрытие года</h2></div><div class="panel-bd">'
-   + '<p class="hint" style="margin:0 0 10px">Переносит остаток каждого участка (<span class="mono">Liko</span>, включая переплаты со знаком минус) в <span class="mono">Sena skola</span> следующего года, очищает журнал платежей и поднимает год. Журнал прошлого года остаётся в истории на GitHub; перед закрытием всё же скачайте выгрузки.</p>'
-   + '<button class="btn" id="roll">Закрыть '+settings.year+' и открыть '+(Number(settings.year)+1)+'</button></div></div>';
+  v.innerHTML = '<div class="panel"><div class="panel-hd"><h2>Rekvizitai ir metai</h2></div><div class="panel-bd">'
+   + '<div class="grid2">'+f("Apskaitos metai","s_y","number",settings.year)+f("Nuoroda SMS žinutėms","s_u","text",settings.publicUrl)+f("Pavedimo gavėjas","s_p","text",settings.payee)+f("IBAN","s_i","text",settings.iban)+'</div>'
+   + '<div style="margin-top:10px">'+f("Grynaisiais adresu","s_c","text",settings.cash)+'</div>'
+   + '<p class="hint" style="margin:10px 0 0">Rekvizitai įterpiami tik į SMS žinutes. Į viešą puslapį jie nepatenka.</p>'
+   + '<div class="toolbar" style="margin-top:12px"><button class="btn pri" id="sv">Išsaugoti</button></div></div></div>'
+   + '<div class="panel"><div class="panel-hd"><h2>Saugumas</h2></div><div class="panel-bd">'
+   + '<dl class="kv"><dt>Duomenys</dt><dd>'+esc(dev.owner+"/"+dev.dataRepo+"/"+dev.dataPath)+'</dd><dt>Puslapis</dt><dd>'+esc(dev.owner+"/"+dev.pubRepo+"/"+dev.pubPath)+'</dd>'
+   + '<dt>Šifravimas</dt><dd>AES-256-GCM · PBKDF2-SHA256 × '+dataIter.toLocaleString("lt-LT")+'</dd><dt>Automatinis užrakinimas</dt><dd>po 15 min. neveikimo</dd></dl>'
+   + '<div class="toolbar" style="margin-top:14px"><button class="btn" id="chpw">Keisti slaptažodį</button><button class="btn" id="lk">Užrakinti</button>'
+   + '<a class="btn ghost" href="https://github.com/'+esc(encodeURIComponent(dev.owner))+'/'+esc(encodeURIComponent(dev.dataRepo))+'/commits" target="_blank" rel="noopener noreferrer">Pakeitimų istorija GitHub</a>'
+   + '<button class="btn dan" id="fg">Pamiršti šį įrenginį</button></div>'
+   + '<p class="hint" style="margin:10px 0 0">Kiekvienas išsaugojimas — atskiras įrašas (commit) privačioje repozitorijoje. Grįžti galima atkūrus reikiamą failo versiją GitHub.</p></div></div>'
+   + '<div class="panel"><div class="panel-hd"><h2>Metų uždarymas</h2></div><div class="panel-bd">'
+   + '<p class="hint" style="margin:0 0 10px">Perkelia kiekvieno sklypo likutį (<span class="mono">Liko</span>, įskaitant permokas su minuso ženklu) į kitų metų <span class="mono">Sena skola</span>, išvalo mokėjimų žurnalą ir padidina metus. Praėjusių metų žurnalas lieka GitHub istorijoje; vis dėlto prieš uždarydami atsisiųskite eksportą.</p>'
+   + '<button class="btn" id="roll">Uždaryti '+settings.year+' ir atidaryti '+(Number(settings.year)+1)+'</button></div></div>';
   el("sv").onclick = ()=>{
     settings.year=Number(el("s_y").value)||settings.year; settings.publicUrl=el("s_u").value.trim(); settings.payee=el("s_p").value.trim();
-    settings.iban=el("s_i").value.trim(); settings.cash=el("s_c").value.trim(); touch(); renderAll(); toast("Сохранено");
+    settings.iban=el("s_i").value.trim(); settings.cash=el("s_c").value.trim(); touch(); renderAll(); toast("Išsaugota");
   };
   el("chpw").onclick = changePassword;
   el("lk").onclick = ()=>lockNow();
-  el("fg").onclick = ()=>{ if(confirm("Удалить сохранённый токен с этого устройства и выйти?")){ lockNow().then(()=>{ forgetDev(); dev=null; screen="setup"; render(); }); } };
+  el("fg").onclick = ()=>{ if(confirm("Ištrinti šiame įrenginyje išsaugotą raktą ir atsijungti?")){ lockNow().then(()=>{ forgetDev(); dev=null; screen="setup"; render(); }); } };
   el("roll").onclick = ()=>{
-    if(!confirm("Закрыть "+settings.year+"? Остатки перейдут в «Sena skola», журнал платежей очистится.")) return;
+    if(!confirm("Uždaryti "+settings.year+" m.? Likučiai pereis į „Sena skola“, mokėjimų žurnalas bus išvalytas.")) return;
     const r = rows(); for(const x of r){ const p = plots.find(y=>y.id===x.id); p.apSkola = x.due; }
-    payments = []; settings.year = Number(settings.year)+1; touch(); renderAll(); toast("Год закрыт");
+    payments = []; settings.year = Number(settings.year)+1; touch(); renderAll(); toast("Metai uždaryti");
   };
 }
 function changePassword(){
-  modal("Сменить пароль",
-    f("Текущий пароль","cp_old","password","")+'<div style="margin-top:10px">'+f("Новый пароль (от 12 символов)","cp_new","password","")+'</div><div style="margin-top:10px">'+f("Новый пароль ещё раз","cp_new2","password","")+'</div>'
-    + '<p class="hint" style="margin:10px 0 0">На остальных устройствах после смены понадобится «Подключить заново» — токен и новый пароль.</p>',
+  modal("Keisti slaptažodį",
+    f("Dabartinis slaptažodis","cp_old","password","")+'<div style="margin-top:10px">'+f("Naujas slaptažodis (ne trumpesnis nei 12 simbolių)","cp_new","password","")+'</div><div style="margin-top:10px">'+f("Pakartokite naują slaptažodį","cp_new2","password","")+'</div>'
+    + '<p class="hint" style="margin:10px 0 0">Kituose įrenginiuose po pakeitimo reikės „Prijungti iš naujo“ — rakto ir naujo slaptažodžio.</p>',
     async ()=>{
       const o=el("cp_old").value, n=el("cp_new").value, n2=el("cp_new2").value;
-      if(n.length<12){ toast("Новый пароль короче 12 символов"); return false; }
-      if(n!==n2){ toast("Новые пароли не совпадают"); return false; }
+      if(n.length<12){ toast("Naujas slaptažodis trumpesnis nei 12 simbolių"); return false; }
+      if(n!==n2){ toast("Nauji slaptažodžiai nesutampa"); return false; }
       try{ const tk = await deriveKey(o, b64d(dev.tok.kdf.salt), dev.tok.kdf.iter||ITER); await unseal(tk, dev.tok); }
-      catch(_){ toast("Текущий пароль неверный"); return false; }
+      catch(_){ toast("Neteisingas dabartinis slaptažodis"); return false; }
       if(dirty || saving) await flush();
-      if(conflict || dirty){ toast("Сначала разберитесь с несохранёнными изменениями"); return false; }
+      if(conflict || dirty){ toast("Pirmiausia sutvarkykite neišsaugotus pakeitimus"); return false; }
       try{
         const salt = crypto.getRandomValues(new Uint8Array(16)); const key = await deriveKey(n, salt, ITER);
         const env = await seal(key, salt, ITER, snapshot());
@@ -1022,16 +1069,16 @@ function changePassword(){
         dataKey=key; dataSalt=salt; dataIter=ITER; dataSha=sha; lastSaved=new Date();
         const tSalt = crypto.getRandomValues(new Uint8Array(16)); const tKey = await deriveKey(n, tSalt, ITER);
         dev.tok = await seal(tKey, tSalt, ITER, {token:token}); saveDev(dev);
-        renderAll(); toast("Пароль изменён");
-      }catch(e){ toast(e.code==="conflict"?"Данные изменились на другом устройстве — обновите и повторите":e.message); return false; }
+        renderAll(); toast("Slaptažodis pakeistas");
+      }catch(e){ toast(e.code==="conflict"?"Duomenys pasikeitė kitame įrenginyje — atnaujinkite ir pakartokite":e.message); return false; }
     });
 }
 
-/* ---------------- общие мелочи ---------------- */
+/* ---------------- bendros smulkmenos ---------------- */
 function modal(title, body, onSave){
   const s = document.createElement("div"); s.className="scrim";
   s.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><div class="panel-hd"><h2>'+esc(title)+'</h2></div><div class="panel-bd">'+body+'</div>'
-    + '<div class="panel-bd" style="border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" data-x>Отмена</button><button class="btn pri" data-ok>Сохранить</button></div></div>';
+    + '<div class="panel-bd" style="border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" data-x>Atšaukti</button><button class="btn pri" data-ok>Išsaugoti</button></div></div>';
   document.body.appendChild(s);
   const close=()=>{ s.remove(); document.removeEventListener("keydown",onKey); };
   const onKey=e=>{ if(e.key==="Escape") close(); };
@@ -1049,10 +1096,10 @@ function toast(msg){
   t.textContent = msg; clearTimeout(toastT); toastT=setTimeout(()=>t.remove(),3200);
 }
 async function copy(text){
-  try{ await navigator.clipboard.writeText(text); toast("Скопировано"); }
+  try{ await navigator.clipboard.writeText(text); toast("Nukopijuota"); }
   catch(e){
     const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select();
-    try{ document.execCommand("copy"); toast("Скопировано"); }catch(_){ toast("Не удалось скопировать"); } ta.remove();
+    try{ document.execCommand("copy"); toast("Nukopijuota"); }catch(_){ toast("Nepavyko nukopijuoti"); } ta.remove();
   }
 }
 function download(name, data, type){
@@ -1065,9 +1112,9 @@ function downloadCsv(name, header, rowsArr){
   download(name, "﻿"+[header].concat(rowsArr).map(r=>r.map(cell).join(",")).join("\r\n"), "text/csv;charset=utf-8");
 }
 
-/* ---------------- старт ---------------- */
+/* ---------------- paleidimas ---------------- */
 (function boot(){
-  if(!window.crypto || !crypto.subtle){ el("root").innerHTML='<div class="gate"><div class="gate-card"><div class="bd"><div class="err">Браузер не поддерживает шифрование (нужен HTTPS и современный браузер).</div></div></div></div>'; return; }
+  if(!window.crypto || !crypto.subtle){ el("root").innerHTML='<div class="gate"><div class="gate-card"><div class="bd"><div class="err">Naršyklė nepalaiko šifravimo (reikia HTTPS ir šiuolaikinės naršyklės).</div></div></div></div>'; return; }
   dev = loadDev();
   screen = dev ? "unlock" : "setup";
   render();
